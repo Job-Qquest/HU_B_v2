@@ -23,7 +23,7 @@ import static javax.swing.WindowConstants.EXIT_ON_CLOSE;
 public class HU_B extends JFrame {
 
     // ==============================
-    // CONFIGURATIE
+    // CONFIGURATIE GIJS
     // ==============================
 
     private static final String API_KEY = System.getenv("OPENAI_API_KEY");
