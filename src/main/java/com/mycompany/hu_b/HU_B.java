@@ -22,7 +22,7 @@ import static javax.swing.WindowConstants.EXIT_ON_CLOSE;
 
 public class HU_B extends JFrame {
 
-    // ==============================test
+    // ==============================
     // CONFIGURATIE
     // ==============================
 
