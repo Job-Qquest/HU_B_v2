@@ -25,6 +25,8 @@ public class HU_B extends JFrame {
     // ==============================
     // CONFIGURATIE GIJS
     // ==============================
+    
+    //test van Tara
 
     private static final String API_KEY = System.getenv("OPENAI_API_KEY");
     private static final OkHttpClient CLIENT = new OkHttpClient.Builder()
