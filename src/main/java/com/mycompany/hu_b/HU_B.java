@@ -25,7 +25,7 @@ public class HU_B extends JFrame {
     // ==============================
     // CONFIGURATIE GIJS
     // ==============================
-    
+    // test Thomas
     //test van Tara
 
     private static final String API_KEY = System.getenv("OPENAI_API_KEY");
