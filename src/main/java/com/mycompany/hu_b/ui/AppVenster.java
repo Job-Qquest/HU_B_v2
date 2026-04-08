@@ -23,7 +23,11 @@ import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import static javax.swing.WindowConstants.EXIT_ON_CLOSE;
 
-public class MainFrame extends JFrame {
+// Deze class bouwt en beheert de volledige gebruikersinterface van de chatbot.
+// Hier worden het hoofdvenster, het chatgedeelte, het invoerveld, de verzendknop en de chatbubbels aangemaakt.
+// De class toont berichten in beeld en geeft gebruikersacties door aan de ChatController.
+
+public class AppVenster extends JFrame {
 
     private static final String PERSONEELSGIDS_VERSIE =
             "Personeelsgids BU Talentclass versie 2024.1"
@@ -37,7 +41,7 @@ public class MainFrame extends JFrame {
 
     private final ChatController controller;
 
-    public MainFrame() throws Exception {
+    public AppVenster() throws Exception {
         setTitle("HU-B – HR Chatbot");
         setSize(1100, 700);
         setLocationRelativeTo(null);

@@ -4,27 +4,31 @@
  */
 package com.mycompany.hu_b.controller;
 
-import com.mycompany.hu_b.service.AnswerService;
-import com.mycompany.hu_b.service.KnowledgeService;
-import com.mycompany.hu_b.service.OpenAIService;
-import com.mycompany.hu_b.ui.MainFrame;
-import com.mycompany.hu_b.util.HttpUtil;
+import com.mycompany.hu_b.service.ChatbotAntwoord;
+import com.mycompany.hu_b.service.PdfProcessing;
+import com.mycompany.hu_b.service.OpenAI;
+import com.mycompany.hu_b.ui.AppVenster;
+import com.mycompany.hu_b.util.HttpRetriesTimeouts;
 import javax.swing.SwingUtilities;
+
+// De controller verwerkt verzonden vragen, controleert of de kennisbron geladen is,
+// start het laden van de personeelsgids en haalt antwoorden op via ChatbotAntwoord.
+// Resultaten en foutmeldingen worden teruggezet in het AppVenster.
 
 public class ChatController {
 
-    private final MainFrame view;
-    private final OpenAIService openAIService;
-    private final KnowledgeService knowledgeService;
-    private final AnswerService answerService;
+    private final AppVenster view;
+    private final OpenAI openAIService;
+    private final PdfProcessing knowledgeService;
+    private final ChatbotAntwoord answerService;
 
     private volatile boolean knowledgeReady = false;
 
-    public ChatController(MainFrame view) {
+    public ChatController(AppVenster view) {
         this.view = view;
-        this.openAIService = new OpenAIService();
-        this.knowledgeService = new KnowledgeService(openAIService);
-        this.answerService = new AnswerService(knowledgeService, openAIService);
+        this.openAIService = new OpenAI();
+        this.knowledgeService = new PdfProcessing(openAIService);
+        this.answerService = new ChatbotAntwoord(knowledgeService, openAIService);
     }
 
     public void send(String question) {
@@ -58,7 +62,7 @@ public class ChatController {
                         ? "Onbekende fout (check console)"
                         : ex.getMessage();
 
-                if (HttpUtil.isTimeoutException(ex)) {
+                if (HttpRetriesTimeouts.isTimeoutException(ex)) {
                     msg = "timeout bij het ophalen van een antwoord van de AI-service. Probeer het opnieuw.";
                 }
 

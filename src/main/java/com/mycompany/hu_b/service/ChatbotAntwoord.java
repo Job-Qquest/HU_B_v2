@@ -4,7 +4,7 @@
  */
 package com.mycompany.hu_b.service;
 
-import com.mycompany.hu_b.model.Chunk;
+import com.mycompany.hu_b.model.ChunkEmbedding;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -16,24 +16,30 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-public class AnswerService {
+// Bouwt het uiteindelijke chatbotantwoord op.
+// De class haalt relevante chunks op uit PdfProcessing,
+// stelt de prompt samen voor het taalmodel,
+// verwerkt speciale gevallen zoals verzuimduur-vragen,
+// en normaliseert het antwoord inclusief bronvermelding en paginareferenties.
+
+public class ChatbotAntwoord {
 
     private final List<org.json.JSONObject> conversationHistory = new ArrayList<>();
-    private final KnowledgeService knowledgeService;
-    private final OpenAIService openAIService;
+    private final PdfProcessing knowledgeService;
+    private final OpenAI openAIService;
 
-    public AnswerService(KnowledgeService knowledgeService, OpenAIService openAIService) {
+    public ChatbotAntwoord(PdfProcessing knowledgeService, OpenAI openAIService) {
         this.knowledgeService = knowledgeService;
         this.openAIService = openAIService;
     }
 
     public String ask(String question) throws Exception {
-        List<Chunk> topChunks = knowledgeService.search(question);
-        Map<Integer, Chunk> sourceById = new LinkedHashMap<>();
+        List<ChunkEmbedding> topChunks = knowledgeService.search(question);
+        Map<Integer, ChunkEmbedding> sourceById = new LinkedHashMap<>();
 
         StringBuilder contextText = new StringBuilder();
         int sourceId = 1;
-        for (Chunk c : topChunks) {
+        for (ChunkEmbedding c : topChunks) {
             Set<String> chunkFunctions = (c.getFunctionScope() == null || c.getFunctionScope().isEmpty())
                     ? knowledgeService.detectFunctionLabels(c.getText())
                     : c.getFunctionScope();
@@ -123,7 +129,7 @@ public class AnswerService {
         return normalizedAnswer;
     }
 
-    public Optional<String> buildVerzuimDurationAnswer(String question, List<Chunk> contextChunks) {
+    public Optional<String> buildVerzuimDurationAnswer(String question, List<ChunkEmbedding> contextChunks) {
         if (question == null || question.isBlank()) {
             return Optional.empty();
         }
@@ -152,7 +158,7 @@ public class AnswerService {
         }
 
         Integer sourcePage = null;
-        for (Chunk chunk : contextChunks) {
+        for (ChunkEmbedding chunk : contextChunks) {
             if (chunk == null || chunk.getText() == null) {
                 continue;
             }
@@ -196,7 +202,7 @@ public class AnswerService {
                 || normalized.contains("inhouding");
     }
 
-    public String normalizeAnswerWithPageReferences(String question, String rawAnswer, Map<Integer, Chunk> sourceById) throws Exception {
+    public String normalizeAnswerWithPageReferences(String question, String rawAnswer, Map<Integer, ChunkEmbedding> sourceById) throws Exception {
         if (rawAnswer == null || rawAnswer.isBlank()) {
             return "Antwoord: Ik kan geen antwoord genereren op basis van de aangeleverde context.\n"
                     + "Bron: N.v.t.";
@@ -220,7 +226,7 @@ public class AnswerService {
             Matcher matcher = Pattern.compile("\\d+").matcher(bronField);
             while (matcher.find()) {
                 int id = Integer.parseInt(matcher.group());
-                Chunk chunk = sourceById.get(id);
+                ChunkEmbedding chunk = sourceById.get(id);
                 if (chunk != null) {
                     allCitedPages.add(chunk.getPage());
                     double relevance = citationRelevanceScore(question, answerText, chunk.getText(), questionEmbedding, chunk.getEmbedding());

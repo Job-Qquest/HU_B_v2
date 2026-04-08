@@ -2,6 +2,10 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
  * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
+
+// Voorbereidende stap
+// Bevat al wel tekst en function scope; zonder embedding
+
 package com.mycompany.hu_b.model;
 
 import java.util.LinkedHashSet;

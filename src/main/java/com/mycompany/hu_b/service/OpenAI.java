@@ -4,7 +4,7 @@
  */
 package com.mycompany.hu_b.service;
 
-import com.mycompany.hu_b.util.HttpUtil;
+import com.mycompany.hu_b.util.HttpRetriesTimeouts;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -16,7 +16,12 @@ import okhttp3.Response;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-public class OpenAIService {
+// Verzorgt alle communicatie met de OpenAI API.
+// De class controleert of de API-key aanwezig is,
+// maakt embeddings van tekst voor semantic search
+// en stuurt prompts naar het chatmodel om antwoorden te laten genereren.
+
+public class OpenAI {
 
     private static final String API_KEY = System.getenv("OPENAI_API_KEY");
 
@@ -34,6 +39,8 @@ public class OpenAIService {
         }
     }
 
+    // Roept de embedding-API aan en retourneert de numerieke vector van de invoertekst.
+    
     public List<Double> embed(String input) throws Exception {
         JSONObject body = new JSONObject()
                 .put("model", "text-embedding-3-small")
@@ -47,7 +54,7 @@ public class OpenAIService {
                         MediaType.parse("application/json")))
                 .build();
 
-        try (Response response = HttpUtil.executeWithRetries(CLIENT, request, "Embedding")) {
+        try (Response response = HttpRetriesTimeouts.executeWithRetries(CLIENT, request, "Embedding")) {
             JSONObject json = new JSONObject(response.body().string());
 
             JSONArray arr = json.getJSONArray("data")
@@ -83,7 +90,7 @@ public class OpenAIService {
                         MediaType.parse("application/json")))
                 .build();
 
-        try (Response response = HttpUtil.executeWithRetries(CLIENT, request, "Chat")) {
+        try (Response response = HttpRetriesTimeouts.executeWithRetries(CLIENT, request, "Chat")) {
             JSONObject json = new JSONObject(response.body().string());
 
             return json.getJSONArray("choices")

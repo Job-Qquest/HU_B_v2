@@ -10,7 +10,11 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 
-public class HttpUtil {
+// De belangrijkste taak is het uitvoeren van API-requests met retries bij tijdelijke fouten,
+// zoals timeouts, rate limits of serverfouten.
+// Daarnaast bevat deze class een helper om timeout-fouten te herkennen.
+
+public class HttpRetriesTimeouts {
 
     public static Response executeWithRetries(OkHttpClient client, Request request, String operationName) throws Exception {
         final int maxAttempts = 3;

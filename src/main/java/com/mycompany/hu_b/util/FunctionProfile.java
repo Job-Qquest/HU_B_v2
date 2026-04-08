@@ -12,7 +12,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-public class FunctionProfileRegistry {
+// Deze class bevat de centrale lijst met functieprofielen en bijbehorende trefwoorden,
+// De methods in deze class herkennen op basis van tekst of een stuk inhoud
+// bij een bepaalde functie of doelgroep hoort.
+
+public class FunctionProfile {
 
     private static final Map<String, List<String>> FUNCTION_PROFILES = createFunctionProfiles();
 

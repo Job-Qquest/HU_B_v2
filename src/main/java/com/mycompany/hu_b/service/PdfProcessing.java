@@ -4,9 +4,9 @@
  */
 package com.mycompany.hu_b.service;
 
-import com.mycompany.hu_b.model.Chunk;
+import com.mycompany.hu_b.model.ChunkEmbedding;
 import com.mycompany.hu_b.model.ChunkDraft;
-import com.mycompany.hu_b.util.FunctionProfileRegistry;
+import com.mycompany.hu_b.util.FunctionProfile;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,16 +20,20 @@ import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 
-public class KnowledgeService {
+// De class leest de PDF in, splitst de tekst in chunks, maakt embeddings,
+// herkent functiegebonden inhoud en zoekt de meest relevante chunks
+// voor een gebruikersvraag met een combinatie van semantische en lexicale matching.
 
-    private final List<Chunk> chunks = new ArrayList<>();
-    private final OpenAIService openAIService;
+public class PdfProcessing {
 
-    public KnowledgeService(OpenAIService openAIService) {
+    private final List<ChunkEmbedding> chunks = new ArrayList<>();
+    private final OpenAI openAIService;
+
+    public PdfProcessing(OpenAI openAIService) {
         this.openAIService = openAIService;
     }
 
-    public List<Chunk> getChunks() {
+    public List<ChunkEmbedding> getChunks() {
         return chunks;
     }
 
@@ -46,7 +50,7 @@ public class KnowledgeService {
             List<ChunkDraft> drafts = chunkTextWithFunctionScope(pageText, 800, activeFunctionScope);
 
             for (ChunkDraft draft : drafts) {
-                chunks.add(new Chunk(draft.getText(), openAIService.embed(draft.getText()), page, draft.getFunctionScope()));
+                chunks.add(new ChunkEmbedding(draft.getText(), openAIService.embed(draft.getText()), page, draft.getFunctionScope()));
             }
         }
 
@@ -134,11 +138,11 @@ public class KnowledgeService {
     }
 
     public Set<String> detectFunctionHeaderLabels(String line) {
-        return FunctionProfileRegistry.detectFunctionHeaderLabels(line);
+        return FunctionProfile.detectFunctionHeaderLabels(line);
     }
 
     public Set<String> detectFunctionLabels(String text) {
-        return FunctionProfileRegistry.detectFunctionLabels(text);
+        return FunctionProfile.detectFunctionLabels(text);
     }
 
     public double cosine(List<Double> a, List<Double> b) {
@@ -151,13 +155,13 @@ public class KnowledgeService {
         return dot / (Math.sqrt(na) * Math.sqrt(nb));
     }
 
-    public List<Chunk> search(String query) throws Exception {
+    public List<ChunkEmbedding> search(String query) throws Exception {
         String retrievalQuery = buildRetrievalQuery(query);
         List<Double> qVec = openAIService.embed(retrievalQuery);
 
-        List<Map.Entry<Chunk, Double>> scoredChunks = new ArrayList<>();
+        List<Map.Entry<ChunkEmbedding, Double>> scoredChunks = new ArrayList<>();
 
-        for (Chunk c : chunks) {
+        for (ChunkEmbedding c : chunks) {
             double semanticScore = cosine(c.getEmbedding(), qVec);
             double lexicalScore = lexicalSimilarity(retrievalQuery, c.getText());
             double score = (semanticScore * 0.80) + (lexicalScore * 0.20);
@@ -170,19 +174,19 @@ public class KnowledgeService {
         double MIN_SIMILARITY = 0.3;
         int MAX_RESULTS = 8;
 
-        List<Chunk> results = new ArrayList<>();
-        Set<Chunk> added = new HashSet<>();
+        List<ChunkEmbedding> results = new ArrayList<>();
+        Set<ChunkEmbedding> added = new HashSet<>();
 
         boolean talentclassVraag = isTalentclassQuestion(query);
         boolean referralVraag = isReferralQuestion(query);
         Set<String> functionLabels = detectFunctionLabels(query);
 
-        for (Map.Entry<Chunk, Double> entry : scoredChunks) {
+        for (Map.Entry<ChunkEmbedding, Double> entry : scoredChunks) {
             if (entry.getValue() < MIN_SIMILARITY) {
                 break;
             }
 
-            Chunk candidate = entry.getKey();
+            ChunkEmbedding candidate = entry.getKey();
 
             if (!functionLabels.isEmpty() && !matchesFunctionScope(candidate, functionLabels)) {
                 continue;
@@ -201,8 +205,8 @@ public class KnowledgeService {
             }
         }
 
-        for (Map.Entry<Chunk, Double> entry : scoredChunks) {
-            Chunk candidate = entry.getKey();
+        for (Map.Entry<ChunkEmbedding, Double> entry : scoredChunks) {
+            ChunkEmbedding candidate = entry.getKey();
 
             if (!functionLabels.isEmpty() && !matchesFunctionScope(candidate, functionLabels)) {
                 continue;
@@ -243,7 +247,7 @@ public class KnowledgeService {
         return enriched.toString();
     }
 
-    public boolean matchesFunctionScope(Chunk chunk, Set<String> requiredLabels) {
+    public boolean matchesFunctionScope(ChunkEmbedding chunk, Set<String> requiredLabels) {
         if (chunk == null || chunk.getText() == null || requiredLabels == null || requiredLabels.isEmpty()) {
             return true;
         }
@@ -320,7 +324,7 @@ public class KnowledgeService {
                 || normalized.contains("tc-consultant");
     }
 
-    public boolean isTalentclassChunk(Chunk chunk) {
+    public boolean isTalentclassChunk(ChunkEmbedding chunk) {
         if (chunk == null || chunk.getText() == null) {
             return false;
         }
