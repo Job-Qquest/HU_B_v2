@@ -16,6 +16,12 @@ import okhttp3.Response;
 
 public class HttpRetriesTimeouts {
 
+    // Voert een HTTP-request uit met retry-mechanisme.
+    // Probeert opnieuw bij tijdelijke fouten zoals timeouts, rate limits (429) en serverfouten (5xx).
+    // Gebruikt exponential backoff tussen pogingen en stopt na een maximaal aantal attempts.
+    //
+    // Wordt aangeroepen bij API calls, zowel voor embeddings als het genereren van het antwoord.
+    
     public static Response executeWithRetries(OkHttpClient client, Request request, String operationName) throws Exception {
         final int maxAttempts = 3;
         long waitMs = 1200;
@@ -64,6 +70,10 @@ public class HttpRetriesTimeouts {
         throw new RuntimeException(operationName + " kon niet worden uitgevoerd.");
     }
 
+    
+    // Controleert of een exception (of een onderliggende oorzaak) een SocketTimeoutException bevat.
+    // Word gebruikt om gebruiksvriendelijke foutmeldingen te tonen bij het sturen van een bericht.
+    
     public static boolean isTimeoutException(Throwable throwable) {
         Throwable current = throwable;
         while (current != null) {
