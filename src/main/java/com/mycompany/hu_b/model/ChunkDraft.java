@@ -4,7 +4,8 @@
  */
 
 // Voorbereidende stap
-// Bevat al wel tekst en function scope; zonder embedding
+// Bevat al wel tekst en bijbehorende functielabels; zonder embedding
+// Dit zal vervolgens omgezet worden naar een definitieve chunk met embedding (ChunkEmbedding)
 
 package com.mycompany.hu_b.model;
 
@@ -14,7 +15,8 @@ import java.util.Set;
 public class ChunkDraft {
     private final String text;
     private final Set<String> functionScope;
-
+    
+// Maakt een nieuwe ChunkDraft met tekst en functielabels
     public ChunkDraft(String text, Set<String> functionScope) {
         this.text = text;
         this.functionScope = functionScope == null
@@ -22,10 +24,12 @@ public class ChunkDraft {
                 : new LinkedHashSet<>(functionScope);
     }
 
+// Geeft de tekst van deze chunk terug
     public String getText() {
         return text;
     }
 
+// Geeft de functielabels terug die bij deze chunk horen
     public Set<String> getFunctionScope() {
         return functionScope;
     }
