@@ -13,7 +13,7 @@ import javax.swing.SwingUtilities;
 
 // De controller verwerkt verzonden vragen, controleert of de kennisbron geladen is,
 // start het laden van de personeelsgids en haalt antwoorden op via ChatbotAntwoord.
-// Resultaten en foutmeldingen worden teruggezet in het AppVenster.
+// Resultaten en foutmeldingen worden teruggezet in het AppVenster (de UI).
 
 public class ChatController {
 
@@ -24,6 +24,7 @@ public class ChatController {
 
     private volatile boolean knowledgeReady = false;
 
+// Initialiseert alle onderdelen van de chatbot
     public ChatController(AppVenster view) {
         this.view = view;
         this.openAIService = new OpenAI();
@@ -31,6 +32,7 @@ public class ChatController {
         this.answerService = new ChatbotAntwoord(knowledgeService, openAIService);
     }
 
+// Methode die wordt aangeroepen wanneer gebruiker een vraag stelt
     public void send(String question) {
         if (question == null || question.trim().isEmpty()) return;
 
@@ -39,9 +41,11 @@ public class ChatController {
             return;
         }
 
+// Toon de vraag van de gebruiker in de UI en maak het invoerveld leeg
         view.addUserBubble(question);
         view.clearInput();
 
+// Start een nieuwe thread zodat de UI niet vastloopt tijdens API-calls        
         new Thread(() -> {
             try {
                 String answer = answerService.ask(question);
@@ -52,6 +56,7 @@ public class ChatController {
 
                 String finalAnswer = answer;
 
+// Zet het antwoord terug in de UI
                 SwingUtilities.invokeLater(() ->
                         view.addAssistantBubble(finalAnswer));
 
@@ -74,11 +79,14 @@ public class ChatController {
         }).start();
     }
 
+// Methode die bij het opstarten wordt aangeroepen om de kennis (PDF) te laden
+// Ook dit gebeurt in een aparte thread (kan lang duren)
     public void startKnowledgeLoading() {
         new Thread(() -> {
             try {
                 openAIService.validateApiKey();
 
+// Laad de personeelsgids en maak embeddings
                 knowledgeService.loadGuide("personeelsgids.pdf");
                 knowledgeReady = true;
 
