@@ -5,8 +5,8 @@
 package com.mycompany.hu_b.controller;
 
 import com.mycompany.hu_b.service.ChatbotAntwoord;
-import com.mycompany.hu_b.service.PdfProcessing;
 import com.mycompany.hu_b.service.OpenAI;
+import com.mycompany.hu_b.service.PdfProcessing;
 import com.mycompany.hu_b.ui.AppVenster;
 import com.mycompany.hu_b.util.HttpRetriesTimeouts;
 import javax.swing.SwingUtilities;
