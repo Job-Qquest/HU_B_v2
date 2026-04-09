@@ -4,16 +4,22 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 
+//Deze klasse is verantwoordelijk voor het bouwen van het bovenste gedeelte
+//van de user interface. Alle chatbubbels.
 public class BerichtenTonen {
 
     private JPanel chatPanel;
     private JScrollPane scrollPane;
 
+    // Initialiseert het onderdeel dat alle chatberichten toont.
+    // Roept direct de setup van het chatgedeelte aan.
     public BerichtenTonen() {
         setup();
     }
 
-    // Bouwt het chatgedeelte waarin alle berichten worden getoond.
+    // Bouwt het chatgedeelte van de interface.
+    // Maakt het panel voor de berichten en de scrollbare container daaromheen.
+    // Wordt alleen gebruikt bij het initialiseren van deze class.
     private void setup() {
         chatPanel = new JPanel();
         chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
@@ -28,7 +34,9 @@ public class BerichtenTonen {
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
     }
 
-    // Toont een chatbubble voor de gebruiker of de assistent.
+    // Voegt één chatbericht toe aan het scherm als bubble van gebruiker of assistent.
+    // Verwerkt ook een eventuele disclaimer apart in de opmaak.
+    // Wordt aangeroepen vanuit AppVenster om berichten zichtbaar te maken in de UI.
     public void addBubble(String text, boolean user) {
         JPanel row = new JPanel(new BorderLayout());
         row.setOpaque(false);
@@ -98,6 +106,7 @@ public class BerichtenTonen {
         });
     }
 
+    // Geeft de scrollbare container van het chatgedeelte terug.
     public JScrollPane getScrollPane() {
         return scrollPane;
     }
