@@ -11,7 +11,8 @@
  - de embedding-vector (AI-representatie van de tekst)
  - het paginanummer uit de bron
  - de functielabels (functionScope)
- 
+ - optioneel de naam van het bronbestand voor documenten zonder pagina-indeling
+
  Deze class wordt gebruikt tijdens het zoeken (retrieval) om relevante informatie
  te vinden op basis van semantische overeenkomst (embeddings).
 */
@@ -26,15 +27,22 @@ public class ChunkEmbedding {
     private final List<Double> embedding;
     private final int page;
     private final Set<String> functionScope;
-
+    private final String sourceLabel;
+    
 // Maakt een definitieve chunk met alle benodigde informatie    
     public ChunkEmbedding(String text, List<Double> embedding, int page, Set<String> functionScope) {
+        this(text, embedding, page, functionScope, null);
+    }
+
+// Maakt een definitieve chunk met een optionele bronnaam voor Word- of PDF-bijlagen
+    public ChunkEmbedding(String text, List<Double> embedding, int page, Set<String> functionScope, String sourceLabel) {
         this.text = text;
         this.embedding = embedding;
         this.page = page;
         this.functionScope = functionScope == null
                 ? new LinkedHashSet<>()
                 : new LinkedHashSet<>(functionScope);
+        this.sourceLabel = sourceLabel == null || sourceLabel.isBlank() ? null : sourceLabel.trim();
     }
 
 // Tekst van de chunk
@@ -55,5 +63,10 @@ public class ChunkEmbedding {
 // Functielabels die bij de chunk horen
     public Set<String> getFunctionScope() {
         return functionScope;
+    }
+
+// Optionele titel of bestandsnaam van de bron
+    public String getSourceLabel() {
+        return sourceLabel;
     }
 }
