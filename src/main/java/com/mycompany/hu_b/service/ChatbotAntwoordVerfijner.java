@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 public class ChatbotAntwoordVerfijner {
 
@@ -39,54 +38,68 @@ public class ChatbotAntwoordVerfijner {
 
 // Haal bron-ID's op
         String bronField = extractField(rawAnswer, "BronID:");
-        Set<Integer> citedPages = new LinkedHashSet<>();
-        Set<Integer> allCitedPages = new LinkedHashSet<>();
-// Scores per pagina
-        Map<Integer, Double> pageRelevanceScores = new java.util.HashMap<>();
-        Map<Integer, Integer> pageChunkCounts = new java.util.HashMap<>();
+        Set<String> citedReferences = new LinkedHashSet<>();
+        Set<String> allCitedReferences = new LinkedHashSet<>();
+// Scores per bronverwijzing
+        Map<String, Double> referenceRelevanceScores = new java.util.HashMap<>();
+        Map<String, Integer> referenceChunkCounts = new java.util.HashMap<>();
 
 // Maak embedding van de vraag
         List<Double> questionEmbedding = openAIService.embed(question);
 
 // Als er bron-ID's zijn -> verwerken
-// Bijbehorende chunk, relevantie score berekenen, score optellen per pagina, hoeveel chunks per pagina
+// Bijbehorende chunk, relevantie score berekenen, score optellen per bron en
+// onthouden welke bronverwijzingen uiteindelijk in de output moeten komen.
         if (bronField != null && !bronField.equalsIgnoreCase("N.v.t.")) {
             Matcher matcher = Pattern.compile("\\d+").matcher(bronField);
             while (matcher.find()) {
                 int id = Integer.parseInt(matcher.group());
                 ChunkEmbedding chunk = sourceById.get(id);
                 if (chunk != null) {
-                    allCitedPages.add(chunk.getPage());
+                    String reference = formatSourceReference(chunk);
+                    allCitedReferences.add(reference);
                     double relevance = citationRelevanceScore(question, answerText, chunk.getText(), questionEmbedding, chunk.getEmbedding());
-                    pageRelevanceScores.merge(chunk.getPage(), relevance, Double::sum);
-                    pageChunkCounts.merge(chunk.getPage(), 1, Integer::sum);
+                    referenceRelevanceScores.merge(reference, relevance, Double::sum);
+                    referenceChunkCounts.merge(reference, 1, Integer::sum);
                     if (isRelevantCitation(question, answerText, chunk.getText())) {
-                        citedPages.add(chunk.getPage());
+                        citedReferences.add(reference);
                     }
                 }
             }
         }
-// Gemiddelde score per pagina berekenen
-        pageRelevanceScores.replaceAll((page, sum) ->
-                sum / pageChunkCounts.getOrDefault(page, 1));
-        if (citedPages.isEmpty()) {
-            citedPages.addAll(allCitedPages);
+// Gemiddelde score per bronverwijzing berekenen
+        referenceRelevanceScores.replaceAll((reference, sum) ->
+                sum / referenceChunkCounts.getOrDefault(reference, 1));
+        if (citedReferences.isEmpty()) {
+            citedReferences.addAll(allCitedReferences);
         }
 
         String bronText;
 
-// Als er geen pagina's zijn -> N.v.t.
-        if (citedPages.isEmpty()) {
+// Als er geen bronnen zijn -> N.v.t.
+        if (citedReferences.isEmpty()) {
             bronText = "N.v.t.";
         } else {
-// Format: PAGINA 1, PAGINA 2, etc.
-            bronText = "PAGINA " + citedPages.stream()
-                    .map(String::valueOf)
-                    .collect(Collectors.joining(", PAGINA "));
+// Format: PAGINA 1 of documentnaam
+            bronText = String.join(", ", citedReferences);
         }
 // Eindresultaat
         return "Antwoord: " + answerText.trim() + "\n"
                 + "Bron: " + bronText;
+    }
+
+// Zet een chunk om naar een bronverwijzing die klopt voor PDF en Word.
+// PDF-chunks krijgen een paginanummer; Word-bronnen krijgen de bestandsnaam.
+    private String formatSourceReference(ChunkEmbedding chunk) {
+        if (chunk == null) {
+            return "N.v.t.";
+        }
+
+        if (chunk.getSourceLabel() != null && !chunk.getSourceLabel().isBlank()) {
+            return chunk.getSourceLabel();
+        }
+
+        return "PAGINA " + chunk.getPage();
     }
 
 // Bepaalt of een chunk relevant is voor het antwoord
