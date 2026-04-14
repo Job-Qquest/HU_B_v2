@@ -27,6 +27,18 @@
             <version>3.0.1</version>
         </dependency>
 
+        <!-- Word-documenten lezen (.docx en .doc) -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-scratchpad</artifactId>
+            <version>5.2.5</version>
+        </dependency>
+
         <!-- HTTP client -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
