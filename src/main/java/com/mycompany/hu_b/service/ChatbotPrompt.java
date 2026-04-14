@@ -45,8 +45,8 @@ public class ChatbotPrompt {
 
             contextText.append("BRON ")
                     .append(sourceId)
-                    .append(" | PAGINA ")
-                    .append(c.getPage())
+                    .append(" | ")
+                    .append(formatSourceReference(c))
                     .append(" | FUNCTIEAFHANKELIJK: ")
                     .append(functionMarker)
                     .append(": ")
@@ -57,6 +57,20 @@ public class ChatbotPrompt {
         }
 
         return contextText.toString();
+    }
+
+// Maakt een leesbare bronverwijzing voor de context.
+// PDF-chunks krijgen een paginanummer; Word-bronnen krijgen alleen de bestandsnaam.
+    private String formatSourceReference(ChunkEmbedding chunk) {
+        if (chunk == null) {
+            return "N.v.t.";
+        }
+
+        if (chunk.getSourceLabel() != null && !chunk.getSourceLabel().isBlank()) {
+            return chunk.getSourceLabel();
+        }
+
+        return "PAGINA " + chunk.getPage();
     }
 
 // Bouwt de volledige system prompt voor OpenAI
@@ -152,7 +166,7 @@ public class ChatbotPrompt {
         }
 
 // Zoekt bronpagina in context
-        Integer sourcePage = null;
+        ChunkEmbedding sourceChunk = null;
         for (ChunkEmbedding chunk : contextChunks) {
             if (chunk == null || chunk.getText() == null) {
                 continue;
@@ -162,14 +176,14 @@ public class ChatbotPrompt {
             String chunkText = chunk.getText().toLowerCase();
             if (chunkText.contains("langdurig verzuim")
                     && (chunkText.contains("meer dan twee weken") || chunkText.contains("langer dan twee weken"))) {
-                sourcePage = chunk.getPage();
+                sourceChunk = chunk;
                 break;
             }
         }
 
 // Langdurig verzuim is meer dan 14 dagen verzuim
         boolean langdurigVerzuim = totalDays > 14;
-        String bron = sourcePage == null ? "N.v.t." : "PAGINA " + sourcePage;
+        String bron = sourceChunk == null ? "N.v.t." : formatSourceReference(sourceChunk);
 
 // Genereert antwoord zonder OpenAI
         if (langdurigVerzuim) {
