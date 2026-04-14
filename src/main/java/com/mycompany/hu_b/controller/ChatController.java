@@ -88,7 +88,9 @@ public class ChatController {
                 openAIService.validateApiKey();
 
 // Laad de personeelsgids en maak embeddings
+                // Deze extra bestanden komen uit de PDF en worden als bron toegevoegd.
                 knowledgeService.loadGuide(resolveGuidePath(), List.of(
+                        // Extra documenten die in de gids genoemd worden en dus meegezocht moeten worden.
                         "Adviezen m.b.t. gezond in een auto rijden.docx",
                         "Gezond beeldschermwerk.docx",
                         "Pensioenreglement ZwitserLeven 1-1-2018.pdf",
@@ -114,6 +116,7 @@ public class ChatController {
         }).start();
     }
 
+    // De hoofdgids blijft altijd de PDF; daaruit halen we de verwijzingen naar extra bronnen.
     private String resolveGuidePath() {
         return "personeelsgids.pdf";
     }
