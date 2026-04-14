@@ -7,7 +7,6 @@ package com.mycompany.hu_b.service;
 import com.mycompany.hu_b.model.ChunkEmbedding;
 import com.mycompany.hu_b.model.ChunkDraft;
 import com.mycompany.hu_b.util.FunctionProfile;
-import java.io.File;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -167,19 +166,25 @@ public class PdfProcessing {
         }
     }
 
-// Leest een extra Word-document en splitst het per alinea in chunks.
+// Leest een extra Word-document en splitst het per pagina in chunks.
     private void loadSupplementaryWordDocument(Path guidePath) throws Exception {
-        // Word-bronnen worden per alinea omgezet naar chunks en embeddings.
+        // Word-bronnen worden op basis van page breaks omgezet naar chunks en embeddings.
         Set<String> activeFunctionScope = new LinkedHashSet<>();
-        List<String> sections = extractWordSections(guidePath);
+        List<String> pages = extractWordPages(guidePath);
+        String sourceLabel = buildSourceLabel(guidePath);
 
-        int sectionNumber = 1;
-        for (String sectionText : sections) {
-            List<ChunkDraft> drafts = chunkTextWithFunctionScope(sectionText, 800, activeFunctionScope);
+        int pageNumber = 1;
+        for (String pageText : pages) {
+            List<ChunkDraft> drafts = chunkTextWithFunctionScope(pageText, 800, activeFunctionScope);
             for (ChunkDraft draft : drafts) {
-                chunks.add(new ChunkEmbedding(draft.getText(), openAIService.embed(draft.getText()), sectionNumber, draft.getFunctionScope()));
+                chunks.add(new ChunkEmbedding(
+                        draft.getText(),
+                        openAIService.embed(draft.getText()),
+                        pageNumber,
+                        draft.getFunctionScope(),
+                        sourceLabel));
             }
-            sectionNumber++;
+            pageNumber++;
         }
     }
 
@@ -252,37 +257,62 @@ public class PdfProcessing {
         }
     }
 
-// Leest de inhoud van een Word-document uit als losse tekstsecties.
+// Leest de inhoud van een Word-document uit als losse tekstpagina's.
 // Voor .docx gebruiken we XWPF, voor .doc gebruiken we HWPF.
-    private List<String> extractWordSections(Path guidePath) throws Exception {
-        // Lees de inhoud uit een Word-document als losse tekstsecties.
-        List<String> sections = new ArrayList<>();
+    private List<String> extractWordPages(Path guidePath) throws Exception {
+        // Lees de inhoud uit een Word-document als losse tekstpagina's.
+        // De pagina-indeling komt uit page breaks (\f) als die in het document aanwezig zijn.
+        List<String> pages = new ArrayList<>();
         String normalizedPath = guidePath.toString().toLowerCase(Locale.ROOT);
 
         if (normalizedPath.endsWith(".docx")) {
             try (java.io.FileInputStream input = new java.io.FileInputStream(guidePath.toFile());
-                    org.apache.poi.xwpf.usermodel.XWPFDocument document = new org.apache.poi.xwpf.usermodel.XWPFDocument(input)) {
-                document.getParagraphs().forEach(paragraph -> {
-                    String paragraphText = paragraph.getText();
-                    if (paragraphText != null && !paragraphText.isBlank()) {
-                        sections.add(paragraphText.trim());
+                    org.apache.poi.xwpf.usermodel.XWPFDocument document = new org.apache.poi.xwpf.usermodel.XWPFDocument(input);
+                    org.apache.poi.xwpf.extractor.XWPFWordExtractor extractor = new org.apache.poi.xwpf.extractor.XWPFWordExtractor(document)) {
+                String fullText = extractor.getText();
+                for (String pageText : splitWordPages(fullText)) {
+                    if (!pageText.isBlank()) {
+                        pages.add(pageText.trim());
                     }
-                });
+                }
             }
-            return sections;
+            return pages;
         }
 
         try (java.io.FileInputStream input = new java.io.FileInputStream(guidePath.toFile());
                 org.apache.poi.hwpf.HWPFDocument document = new org.apache.poi.hwpf.HWPFDocument(input);
                 org.apache.poi.hwpf.extractor.WordExtractor extractor = new org.apache.poi.hwpf.extractor.WordExtractor(document)) {
-            for (String paragraph : extractor.getParagraphText()) {
-                if (paragraph != null && !paragraph.isBlank()) {
-                    sections.add(paragraph.trim());
+            String fullText = extractor.getText();
+            for (String pageText : splitWordPages(fullText)) {
+                if (!pageText.isBlank()) {
+                    pages.add(pageText.trim());
                 }
             }
         }
 
-        return sections;
+        return pages;
+    }
+
+// Splitst Word-tekst op basis van page breaks.
+// Dit geeft echte paginablokken als het document page breaks bevat; anders blijft alles op pagina 1.
+    private List<String> splitWordPages(String text) {
+        List<String> pages = new ArrayList<>();
+        if (text == null || text.isBlank()) {
+            return pages;
+        }
+
+        String[] parts = text.split("\\f");
+        for (String part : parts) {
+            if (part != null && !part.isBlank()) {
+                pages.add(part.trim());
+            }
+        }
+
+        if (pages.isEmpty()) {
+            pages.add(text.trim());
+        }
+
+        return pages;
     }
 
 // Probeert een URI uit de PDF om te zetten naar een lokaal bestandspad.
@@ -357,6 +387,18 @@ public class PdfProcessing {
         if ((lower.endsWith(".docx") || lower.endsWith(".doc")) && candidate.toFile().exists()) {
             linkedFiles.add(candidate);
         }
+    }
+
+// Zet een bestandspad om naar een nette titel voor bronvermelding.
+// We gebruiken de bestandsnaam zonder extensie zodat Word-bronnen geen paginanummer nodig hebben.
+    private String buildSourceLabel(Path path) {
+        if (path == null || path.getFileName() == null) {
+            return null;
+        }
+
+        String fileName = path.getFileName().toString();
+        int lastDot = fileName.lastIndexOf('.');
+        return lastDot > 0 ? fileName.substring(0, lastDot) : fileName;
     }
 
 // Simpele methode om tekst op te splitsen in blokken van een vast aantal woorden. 
