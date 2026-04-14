@@ -30,6 +30,9 @@ import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
 import org.apache.pdfbox.text.PDFTextStripper;
 
+
+// Test Demi 14-04-2026
+
 // De class leest de PDF in, haalt gelinkte Word-bronnen uit dezelfde map op, splitst de tekst
 // in chunks, maakt embeddings, herkent functiegebonden inhoud en zoekt de meest relevante chunks
 // voor een gebruikersvraag met een combinatie van semantische en lexicale matching.
