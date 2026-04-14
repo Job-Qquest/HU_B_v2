@@ -81,7 +81,7 @@ public class BerichtenTonen {
         bubble.setSize(new Dimension(700, Short.MAX_VALUE));
 
         if (user) {
-            bubble.setBackground(new Color(0, 90, 160));
+            bubble.setBackground(new Color(55, 192, 241));
             bubble.setForeground(Color.WHITE);
         } else {
             bubble.setBackground(new Color(255, 255, 255, 235));
