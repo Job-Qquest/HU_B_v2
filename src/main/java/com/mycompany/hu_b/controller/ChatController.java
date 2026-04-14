@@ -9,6 +9,7 @@ import com.mycompany.hu_b.service.OpenAI;
 import com.mycompany.hu_b.service.PdfProcessing;
 import com.mycompany.hu_b.ui.AppVenster;
 import com.mycompany.hu_b.util.HttpRetriesTimeouts;
+import java.util.List;
 import javax.swing.SwingUtilities;
 
 // De controller verwerkt verzonden vragen, controleert of de kennisbron geladen is,
@@ -79,7 +80,7 @@ public class ChatController {
         }).start();
     }
 
-// Methode die bij het opstarten wordt aangeroepen om de kennis (PDF) te laden
+// Methode die bij het opstarten wordt aangeroepen om de kennisbron te laden
 // Ook dit gebeurt in een aparte thread (kan lang duren)
     public void startKnowledgeLoading() {
         new Thread(() -> {
@@ -87,7 +88,14 @@ public class ChatController {
                 openAIService.validateApiKey();
 
 // Laad de personeelsgids en maak embeddings
-                knowledgeService.loadGuide("personeelsgids.pdf");
+                knowledgeService.loadGuide(resolveGuidePath(), List.of(
+                        "Adviezen m.b.t. gezond in een auto rijden.docx",
+                        "Gezond beeldschermwerk.docx",
+                        "Pensioenreglement ZwitserLeven 1-1-2018.pdf",
+                        "Pensioenreglement ZwitserLeven Bijlagen 1-1-2018.pdf",
+                        "PG4 - Vergoedingen.pdf",
+                        "Psychosociale arbeidsbelasting.docx"
+                ));
                 knowledgeReady = true;
 
                 SwingUtilities.invokeLater(() -> {
@@ -104,5 +112,9 @@ public class ChatController {
                 });
             }
         }).start();
+    }
+
+    private String resolveGuidePath() {
+        return "personeelsgids.pdf";
     }
 }
