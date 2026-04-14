@@ -7,8 +7,11 @@ package com.mycompany.hu_b.controller;
 import com.mycompany.hu_b.service.ChatbotAntwoord;
 import com.mycompany.hu_b.service.OpenAI;
 import com.mycompany.hu_b.service.PdfProcessing;
+import com.mycompany.hu_b.service.WebPageArchiveService;
 import com.mycompany.hu_b.ui.AppVenster;
 import com.mycompany.hu_b.util.HttpRetriesTimeouts;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import javax.swing.SwingUtilities;
 
@@ -22,6 +25,7 @@ public class ChatController {
     private final OpenAI openAIService;
     private final PdfProcessing knowledgeService;
     private final ChatbotAntwoord answerService;
+    private final WebPageArchiveService webPageArchiveService;
 
     private volatile boolean knowledgeReady = false;
 
@@ -31,6 +35,7 @@ public class ChatController {
         this.openAIService = new OpenAI();
         this.knowledgeService = new PdfProcessing(openAIService);
         this.answerService = new ChatbotAntwoord(knowledgeService, openAIService);
+        this.webPageArchiveService = new WebPageArchiveService();
     }
 
 // Methode die wordt aangeroepen wanneer gebruiker een vraag stelt
@@ -87,10 +92,23 @@ public class ChatController {
             try {
                 openAIService.validateApiKey();
 
-// Laad de personeelsgids en maak embeddings
-                // Deze extra bestanden komen uit de PDF en worden als bron toegevoegd.
-                knowledgeService.loadGuide(resolveGuidePath(), List.of(
-                        // Extra documenten die in de gids genoemd worden en dus meegezocht moeten worden.
+// Laat eerst de webpagina's archiveren naar lokale PDF's in dezelfde map als de gids.
+                Path guideFile = Path.of(resolveGuidePath()).toAbsolutePath().normalize();
+                Path archiveDirectory = guideFile.getParent();
+                if (archiveDirectory == null) {
+                    // Fallback voor het geval de gids zonder oudermap wordt aangeroepen.
+                    archiveDirectory = Path.of(".").toAbsolutePath().normalize();
+                }
+                List<Path> webArchiveFiles = webPageArchiveService.archivePages(
+                        List.of(
+                                "https://www.rijksoverheid.nl/onderwerpen/vakantiedagen-en-vakantiegeld/vraag-en-antwoord/hoe-kan-ik-mijn-vakantiedagen-opnemen",
+                                "https://www.rijksoverheid.nl/onderwerpen/arbeidsovereenkomst-en-cao/vraag-en-antwoord/welke-soorten-verlof-zijn-er"
+                        ),
+                        archiveDirectory);
+
+// Laad de personeelsgids en maak embeddings.
+// De extra documenten komen uit de PDF en de webpagina's worden eerst lokaal als PDF opgeslagen.
+                List<String> supplementarySources = new ArrayList<>(List.of(
                         "Adviezen m.b.t. gezond in een auto rijden.docx",
                         "Gezond beeldschermwerk.docx",
                         "Pensioenreglement ZwitserLeven 1-1-2018.pdf",
@@ -98,6 +116,11 @@ public class ChatController {
                         "PG4 - Vergoedingen.pdf",
                         "Psychosociale arbeidsbelasting.docx"
                 ));
+                for (Path webArchiveFile : webArchiveFiles) {
+                    supplementarySources.add(webArchiveFile.toString());
+                }
+
+                knowledgeService.loadGuide(resolveGuidePath(), supplementarySources);
                 knowledgeReady = true;
 
                 SwingUtilities.invokeLater(() -> {
