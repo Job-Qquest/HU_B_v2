@@ -55,8 +55,12 @@ public class PdfProcessing {
         loadGuide(guidePath, List.of());
     }
 
+// Hoofdingang voor het laden van de gids.
+// Eerst wordt de hoofd-PDF ingelezen, daarna worden de extra bronnen geladen die
+// handmatig zijn opgegeven of vanuit de PDF als link zijn gevonden.
     public void loadGuide(String guidePath, List<String> supplementarySources) throws Exception {
         chunks.clear();
+        // Houdt bij welke bronnen al zijn verwerkt zodat we niets dubbel inladen.
         Set<String> loadedSources = new LinkedHashSet<>();
 
         String normalizedPath = guidePath == null ? "" : guidePath.toLowerCase(Locale.ROOT);
@@ -67,6 +71,7 @@ public class PdfProcessing {
         loadPdfGuide(guidePath, loadedSources);
 
         if (supplementarySources != null) {
+            // Laad de handmatig opgegeven extra documenten die bij de gids horen.
             for (String sourcePath : supplementarySources) {
                 loadSupplementarySource(sourcePath, loadedSources);
             }
@@ -78,7 +83,10 @@ public class PdfProcessing {
         }
     }
 
+// Leest de hoofd-PDF in, maakt chunks per pagina en zoekt daarna naar gekoppelde
+// Word- of PDF-bronnen die in dezelfde map staan.
     private void loadPdfGuide(String pdfPath, Set<String> loadedSources) throws Exception {
+        // Lees de hoofd-PDF uit en verzamel de documenten waar die PDF naar verwijst.
         Path pdfFile = Path.of(pdfPath).toAbsolutePath().normalize();
         Set<Path> linkedWordFiles = discoverLinkedWordFiles(pdfFile);
 
@@ -106,10 +114,13 @@ public class PdfProcessing {
         }
 
         for (Path linkedWordFile : linkedWordFiles) {
+            // De gevonden Word-bronnen worden daarna ook als kennisbron toegevoegd.
             loadSupplementarySource(linkedWordFile.toString(), loadedSources);
         }
     }
 
+// Laadt een extra bronbestand als kennisbron.
+// Het bestandstype bepaalt of het als PDF, .docx of .doc wordt ingelezen.
     private void loadSupplementarySource(String sourcePath, Set<String> loadedSources) throws Exception {
         if (sourcePath == null || sourcePath.isBlank()) {
             return;
@@ -122,9 +133,11 @@ public class PdfProcessing {
 
         String sourceKey = path.toString().toLowerCase(Locale.ROOT);
         if (loadedSources != null && !loadedSources.add(sourceKey)) {
+            // Zelfde bestand zat al in de kennisbron, dus overslaan.
             return;
         }
 
+        // Kies de juiste reader op basis van bestandstype.
         String lower = path.getFileName() == null ? "" : path.getFileName().toString().toLowerCase(Locale.ROOT);
         if (lower.endsWith(".pdf")) {
             loadSupplementaryPdf(path);
@@ -133,7 +146,9 @@ public class PdfProcessing {
         }
     }
 
+// Leest een extra PDF-bron op dezelfde manier als de hoofdgids.
     private void loadSupplementaryPdf(Path pdfPath) throws Exception {
+        // Extra PDF-bronnen worden op dezelfde manier verwerkt als de hoofdgids.
         try (PDDocument doc = Loader.loadPDF(pdfPath.toFile())) {
             PDFTextStripper stripper = new PDFTextStripper();
             Set<String> activeFunctionScope = new LinkedHashSet<>();
@@ -152,7 +167,9 @@ public class PdfProcessing {
         }
     }
 
+// Leest een extra Word-document en splitst het per alinea in chunks.
     private void loadSupplementaryWordDocument(Path guidePath) throws Exception {
+        // Word-bronnen worden per alinea omgezet naar chunks en embeddings.
         Set<String> activeFunctionScope = new LinkedHashSet<>();
         List<String> sections = extractWordSections(guidePath);
 
@@ -166,7 +183,10 @@ public class PdfProcessing {
         }
     }
 
+// Zoekt in de PDF naar bestandsnamen en linkverwijzingen naar documenten.
+// Alleen bestaande .doc/.docx-bestanden in de map van de PDF worden meegenomen.
     private Set<Path> discoverLinkedWordFiles(Path pdfFile) throws Exception {
+        // Doorzoek de PDF op bestandsnamen en linkannotaties die naar documenten verwijzen.
         Set<Path> linkedFiles = new LinkedHashSet<>();
         Path baseDir = pdfFile.getParent() == null ? Path.of(".") : pdfFile.getParent();
 
@@ -186,6 +206,8 @@ public class PdfProcessing {
         return linkedFiles;
     }
 
+// Haalt losse bestandsnamen uit de tekst van de PDF.
+// Dit vangt situaties af waarin een documentnaam gewoon als tekst in de gids staat.
     private void collectWordFilesFromText(String text, Path baseDir, Set<Path> linkedFiles) {
         if (text == null || text.isBlank()) {
             return;
@@ -197,6 +219,8 @@ public class PdfProcessing {
         }
     }
 
+// Haalt echte PDF-linkannotaties uit een pagina.
+// Hiermee worden klikbare links zoals file:-links of documentverwijzingen meegenomen.
     private void collectWordFilesFromAnnotations(PDPage page, Path baseDir, Set<Path> linkedFiles) throws Exception {
         for (PDAnnotation annotation : page.getAnnotations()) {
             if (!(annotation instanceof PDAnnotationLink link)) {
@@ -211,6 +235,7 @@ public class PdfProcessing {
             if (action instanceof PDActionURI uriAction) {
                 String uriText = uriAction.getURI();
                 if (uriText != null && !uriText.isBlank()) {
+                    // Externe links zoals mailto: of file: worden hier gefilterd.
                     addLinkedWordFileFromUri(baseDir, uriText, linkedFiles);
                 }
                 continue;
@@ -227,7 +252,10 @@ public class PdfProcessing {
         }
     }
 
+// Leest de inhoud van een Word-document uit als losse tekstsecties.
+// Voor .docx gebruiken we XWPF, voor .doc gebruiken we HWPF.
     private List<String> extractWordSections(Path guidePath) throws Exception {
+        // Lees de inhoud uit een Word-document als losse tekstsecties.
         List<String> sections = new ArrayList<>();
         String normalizedPath = guidePath.toString().toLowerCase(Locale.ROOT);
 
@@ -257,11 +285,14 @@ public class PdfProcessing {
         return sections;
     }
 
+// Probeert een URI uit de PDF om te zetten naar een lokaal bestandspad.
+// Niet-bestandslinks zoals mailto: worden genegeerd.
     private void addLinkedWordFileFromUri(Path baseDir, String uriText, Set<Path> linkedFiles) {
         try {
             URI uri = URI.create(uriText.trim());
             String scheme = uri.getScheme();
             if (scheme != null && !scheme.equalsIgnoreCase("file")) {
+                // Niet-bestand links zoals mailto: zijn niet relevant als bronbestand.
                 return;
             }
 
@@ -282,6 +313,9 @@ public class PdfProcessing {
         addLinkedWordFile(baseDir, uriText, linkedFiles);
     }
 
+// Haalt de bestandsnaam uit een PDF-bestandsverwijzing.
+// PDFBox kan de naam op meerdere manieren opslaan, dus we proberen de
+// standaardvariant en vallen daarna terug op de ruwe COS-representatie.
     private String extractFileReference(org.apache.pdfbox.pdmodel.common.filespecification.PDFileSpecification fileSpecification) throws Exception {
         if (fileSpecification == null) {
             return null;
@@ -295,6 +329,8 @@ public class PdfProcessing {
         return fileSpecification.getCOSObject() == null ? null : fileSpecification.getCOSObject().toString();
     }
 
+// Zet een gevonden bestandsverwijzing om naar een echt pad en controleert
+// of het bestand bestaat en een ondersteund Word-formaat heeft.
     private void addLinkedWordFile(Path baseDir, String rawReference, Set<Path> linkedFiles) {
         if (rawReference == null || rawReference.isBlank()) {
             return;
@@ -307,6 +343,7 @@ public class PdfProcessing {
 
         Path candidate = Path.of(cleanedReference);
         if (!candidate.isAbsolute()) {
+            // Verwijsbestand staat meestal in dezelfde map als de PDF.
             candidate = baseDir.resolve(candidate);
         }
 
