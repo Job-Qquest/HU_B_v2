@@ -8,6 +8,8 @@ import com.mycompany.hu_b.model.ChunkEmbedding;
 import com.mycompany.hu_b.model.ChunkDraft;
 import com.mycompany.hu_b.util.FunctionProfile;
 import java.io.File;
+import java.net.URI;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -16,18 +18,28 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.interactive.action.PDAction;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionLaunch;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionRemoteGoTo;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
 import org.apache.pdfbox.text.PDFTextStripper;
 
-// De class leest de PDF in, splitst de tekst in chunks, maakt embeddings,
-// herkent functiegebonden inhoud en zoekt de meest relevante chunks
+// De class leest de PDF in, haalt gelinkte Word-bronnen uit dezelfde map op, splitst de tekst
+// in chunks, maakt embeddings, herkent functiegebonden inhoud en zoekt de meest relevante chunks
 // voor een gebruikersvraag met een combinatie van semantische en lexicale matching.
 
 public class PdfProcessing {
 
-// Lijst met alle chunks uit de PDF, inclusief embedding, pagina en functiescope
+// Lijst met alle chunks uit de gids, inclusief embedding, pagina en functiescope
     private final List<ChunkEmbedding> chunks = new ArrayList<>();
+    private static final Pattern WORD_FILE_PATTERN = Pattern.compile("(?i)([\\w\\-() ]+\\.docx?|[\\w\\-() ]+\\.doc)");
     private final OpenAI openAIService;
 
     public PdfProcessing(OpenAI openAIService) {
@@ -38,35 +50,275 @@ public class PdfProcessing {
         return chunks;
     }
 
-//  Leest de PDF in, splitst de tekst per pagina in chunks en maakt voor elke chunk een embedding.
-    public void loadGuide(String pdfPath) throws Exception {
-        PDDocument doc = Loader.loadPDF(new File(pdfPath));
-        PDFTextStripper stripper = new PDFTextStripper();
-// Houdt bij welke functie-scope actief is tijdens het lezen
-// Bijvoorbeeld: Talentclass, TC consultant, etc.
-        Set<String> activeFunctionScope = new LinkedHashSet<>();
+//  Leest de PDF in en maakt voor elke chunk een embedding.
+    public void loadGuide(String guidePath) throws Exception {
+        loadGuide(guidePath, List.of());
+    }
 
-// Loopt door alle pagina's van de PDF
-        for (int page = 1; page <= doc.getNumberOfPages(); page++) {
-            stripper.setStartPage(page);
-            stripper.setEndPage(page);
+    public void loadGuide(String guidePath, List<String> supplementarySources) throws Exception {
+        chunks.clear();
+        Set<String> loadedSources = new LinkedHashSet<>();
 
-// Haalt tekst van 1 pagina op
-            String pageText = stripper.getText(doc);
-// Deelt pagina op in chunks en houd functiescope bij
-            List<ChunkDraft> drafts = chunkTextWithFunctionScope(pageText, 800, activeFunctionScope);
+        String normalizedPath = guidePath == null ? "" : guidePath.toLowerCase(Locale.ROOT);
+        if (!normalizedPath.endsWith(".pdf")) {
+            throw new IllegalArgumentException("Niet-ondersteund bestandstype. Gebruik een .pdf-bestand als hoofddocument.");
+        }
 
-// Maakt van elke draft een definitieve chunk met embedding
-            for (ChunkDraft draft : drafts) {
-                chunks.add(new ChunkEmbedding(draft.getText(), openAIService.embed(draft.getText()), page, draft.getFunctionScope()));
+        loadPdfGuide(guidePath, loadedSources);
+
+        if (supplementarySources != null) {
+            for (String sourcePath : supplementarySources) {
+                loadSupplementarySource(sourcePath, loadedSources);
             }
         }
 
-        doc.close();
-
-// Als er geen chunks zijn geladen, klopt er iets niet met de PDF
+// Als er geen chunks zijn geladen, klopt er iets niet met het document
         if (chunks.isEmpty()) {
             throw new RuntimeException("Geen tekst uit personeelsgids geladen.");
+        }
+    }
+
+    private void loadPdfGuide(String pdfPath, Set<String> loadedSources) throws Exception {
+        Path pdfFile = Path.of(pdfPath).toAbsolutePath().normalize();
+        Set<Path> linkedWordFiles = discoverLinkedWordFiles(pdfFile);
+
+        try (PDDocument doc = Loader.loadPDF(pdfFile.toFile())) {
+            PDFTextStripper stripper = new PDFTextStripper();
+// Houdt bij welke functie-scope actief is tijdens het lezen
+// Bijvoorbeeld: Talentclass, TC consultant, etc.
+            Set<String> activeFunctionScope = new LinkedHashSet<>();
+
+// Loopt door alle pagina's van de PDF
+            for (int page = 1; page <= doc.getNumberOfPages(); page++) {
+                stripper.setStartPage(page);
+                stripper.setEndPage(page);
+
+// Haalt tekst van 1 pagina op
+                String pageText = stripper.getText(doc);
+// Deelt pagina op in chunks en houd functiescope bij
+                List<ChunkDraft> drafts = chunkTextWithFunctionScope(pageText, 800, activeFunctionScope);
+
+// Maakt van elke draft een definitieve chunk met embedding
+                for (ChunkDraft draft : drafts) {
+                    chunks.add(new ChunkEmbedding(draft.getText(), openAIService.embed(draft.getText()), page, draft.getFunctionScope()));
+                }
+            }
+        }
+
+        for (Path linkedWordFile : linkedWordFiles) {
+            loadSupplementarySource(linkedWordFile.toString(), loadedSources);
+        }
+    }
+
+    private void loadSupplementarySource(String sourcePath, Set<String> loadedSources) throws Exception {
+        if (sourcePath == null || sourcePath.isBlank()) {
+            return;
+        }
+
+        Path path = Path.of(sourcePath).toAbsolutePath().normalize();
+        if (!path.toFile().exists()) {
+            return;
+        }
+
+        String sourceKey = path.toString().toLowerCase(Locale.ROOT);
+        if (loadedSources != null && !loadedSources.add(sourceKey)) {
+            return;
+        }
+
+        String lower = path.getFileName() == null ? "" : path.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".pdf")) {
+            loadSupplementaryPdf(path);
+        } else if (lower.endsWith(".docx") || lower.endsWith(".doc")) {
+            loadSupplementaryWordDocument(path);
+        }
+    }
+
+    private void loadSupplementaryPdf(Path pdfPath) throws Exception {
+        try (PDDocument doc = Loader.loadPDF(pdfPath.toFile())) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            Set<String> activeFunctionScope = new LinkedHashSet<>();
+
+            for (int page = 1; page <= doc.getNumberOfPages(); page++) {
+                stripper.setStartPage(page);
+                stripper.setEndPage(page);
+
+                String pageText = stripper.getText(doc);
+                List<ChunkDraft> drafts = chunkTextWithFunctionScope(pageText, 800, activeFunctionScope);
+
+                for (ChunkDraft draft : drafts) {
+                    chunks.add(new ChunkEmbedding(draft.getText(), openAIService.embed(draft.getText()), page, draft.getFunctionScope()));
+                }
+            }
+        }
+    }
+
+    private void loadSupplementaryWordDocument(Path guidePath) throws Exception {
+        Set<String> activeFunctionScope = new LinkedHashSet<>();
+        List<String> sections = extractWordSections(guidePath);
+
+        int sectionNumber = 1;
+        for (String sectionText : sections) {
+            List<ChunkDraft> drafts = chunkTextWithFunctionScope(sectionText, 800, activeFunctionScope);
+            for (ChunkDraft draft : drafts) {
+                chunks.add(new ChunkEmbedding(draft.getText(), openAIService.embed(draft.getText()), sectionNumber, draft.getFunctionScope()));
+            }
+            sectionNumber++;
+        }
+    }
+
+    private Set<Path> discoverLinkedWordFiles(Path pdfFile) throws Exception {
+        Set<Path> linkedFiles = new LinkedHashSet<>();
+        Path baseDir = pdfFile.getParent() == null ? Path.of(".") : pdfFile.getParent();
+
+        try (PDDocument doc = Loader.loadPDF(pdfFile.toFile())) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            for (int pageIndex = 0; pageIndex < doc.getNumberOfPages(); pageIndex++) {
+                PDPage page = doc.getPage(pageIndex);
+                stripper.setStartPage(pageIndex + 1);
+                stripper.setEndPage(pageIndex + 1);
+
+                String pageText = stripper.getText(doc);
+                collectWordFilesFromText(pageText, baseDir, linkedFiles);
+                collectWordFilesFromAnnotations(page, baseDir, linkedFiles);
+            }
+        }
+
+        return linkedFiles;
+    }
+
+    private void collectWordFilesFromText(String text, Path baseDir, Set<Path> linkedFiles) {
+        if (text == null || text.isBlank()) {
+            return;
+        }
+
+        Matcher matcher = WORD_FILE_PATTERN.matcher(text);
+        while (matcher.find()) {
+            addLinkedWordFile(baseDir, matcher.group(1), linkedFiles);
+        }
+    }
+
+    private void collectWordFilesFromAnnotations(PDPage page, Path baseDir, Set<Path> linkedFiles) throws Exception {
+        for (PDAnnotation annotation : page.getAnnotations()) {
+            if (!(annotation instanceof PDAnnotationLink link)) {
+                continue;
+            }
+
+            PDAction action = link.getAction();
+            if (action == null) {
+                continue;
+            }
+
+            if (action instanceof PDActionURI uriAction) {
+                String uriText = uriAction.getURI();
+                if (uriText != null && !uriText.isBlank()) {
+                    addLinkedWordFileFromUri(baseDir, uriText, linkedFiles);
+                }
+                continue;
+            }
+
+            if (action instanceof PDActionLaunch launchAction) {
+                addLinkedWordFile(baseDir, extractFileReference(launchAction.getFile()), linkedFiles);
+                continue;
+            }
+
+            if (action instanceof PDActionRemoteGoTo goToRemoteAction) {
+                addLinkedWordFile(baseDir, extractFileReference(goToRemoteAction.getFile()), linkedFiles);
+            }
+        }
+    }
+
+    private List<String> extractWordSections(Path guidePath) throws Exception {
+        List<String> sections = new ArrayList<>();
+        String normalizedPath = guidePath.toString().toLowerCase(Locale.ROOT);
+
+        if (normalizedPath.endsWith(".docx")) {
+            try (java.io.FileInputStream input = new java.io.FileInputStream(guidePath.toFile());
+                    org.apache.poi.xwpf.usermodel.XWPFDocument document = new org.apache.poi.xwpf.usermodel.XWPFDocument(input)) {
+                document.getParagraphs().forEach(paragraph -> {
+                    String paragraphText = paragraph.getText();
+                    if (paragraphText != null && !paragraphText.isBlank()) {
+                        sections.add(paragraphText.trim());
+                    }
+                });
+            }
+            return sections;
+        }
+
+        try (java.io.FileInputStream input = new java.io.FileInputStream(guidePath.toFile());
+                org.apache.poi.hwpf.HWPFDocument document = new org.apache.poi.hwpf.HWPFDocument(input);
+                org.apache.poi.hwpf.extractor.WordExtractor extractor = new org.apache.poi.hwpf.extractor.WordExtractor(document)) {
+            for (String paragraph : extractor.getParagraphText()) {
+                if (paragraph != null && !paragraph.isBlank()) {
+                    sections.add(paragraph.trim());
+                }
+            }
+        }
+
+        return sections;
+    }
+
+    private void addLinkedWordFileFromUri(Path baseDir, String uriText, Set<Path> linkedFiles) {
+        try {
+            URI uri = URI.create(uriText.trim());
+            String scheme = uri.getScheme();
+            if (scheme != null && !scheme.equalsIgnoreCase("file")) {
+                return;
+            }
+
+            if (uri.getScheme() != null && uri.getScheme().equalsIgnoreCase("file")) {
+                addLinkedWordFile(baseDir, Path.of(uri).toString(), linkedFiles);
+                return;
+            }
+
+            String pathPart = uri.getPath();
+            if (pathPart != null && !pathPart.isBlank()) {
+                addLinkedWordFile(baseDir, pathPart, linkedFiles);
+                return;
+            }
+        } catch (IllegalArgumentException ignored) {
+            // Geen geldige URI, probeer het als bestandsnaam.
+        }
+
+        addLinkedWordFile(baseDir, uriText, linkedFiles);
+    }
+
+    private String extractFileReference(org.apache.pdfbox.pdmodel.common.filespecification.PDFileSpecification fileSpecification) throws Exception {
+        if (fileSpecification == null) {
+            return null;
+        }
+
+        String file = fileSpecification.getFile();
+        if (file != null && !file.isBlank()) {
+            return file;
+        }
+
+        return fileSpecification.getCOSObject() == null ? null : fileSpecification.getCOSObject().toString();
+    }
+
+    private void addLinkedWordFile(Path baseDir, String rawReference, Set<Path> linkedFiles) {
+        if (rawReference == null || rawReference.isBlank()) {
+            return;
+        }
+
+        String cleanedReference = rawReference.trim()
+                .replace("\"", "")
+                .replace("'", "")
+                .replaceAll("[,;)]+$", "");
+
+        Path candidate = Path.of(cleanedReference);
+        if (!candidate.isAbsolute()) {
+            candidate = baseDir.resolve(candidate);
+        }
+
+        candidate = candidate.normalize();
+        Path fileName = candidate.getFileName();
+        if (fileName == null) {
+            return;
+        }
+
+        String lower = fileName.toString().toLowerCase(Locale.ROOT);
+        if ((lower.endsWith(".docx") || lower.endsWith(".doc")) && candidate.toFile().exists()) {
+            linkedFiles.add(candidate);
         }
     }
 
