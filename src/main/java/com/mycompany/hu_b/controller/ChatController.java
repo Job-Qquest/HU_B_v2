@@ -92,7 +92,7 @@ public class ChatController {
             try {
                 openAIService.validateApiKey();
 
-// Laat eerst de webpagina's archiveren naar lokale PDF's in dezelfde map als de gids.
+// Laat eerst de webpagina's archiveren naar lokale JSON-bestanden in dezelfde map als de gids.
                 Path guideFile = Path.of(resolveGuidePath()).toAbsolutePath().normalize();
                 Path archiveDirectory = guideFile.getParent();
                 if (archiveDirectory == null) {
@@ -107,7 +107,7 @@ public class ChatController {
                         archiveDirectory);
 
 // Laad de personeelsgids en maak embeddings.
-// De extra documenten komen uit de PDF en de webpagina's worden eerst lokaal als PDF opgeslagen.
+// De extra documenten komen uit de PDF en de webpagina's worden eerst lokaal als JSON opgeslagen.
                 List<String> supplementarySources = new ArrayList<>(List.of(
                         "Adviezen m.b.t. gezond in een auto rijden.docx",
                         "Gezond beeldschermwerk.docx",

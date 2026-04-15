@@ -28,19 +28,32 @@ public class ChunkEmbedding {
     private final int page;
     private final Set<String> functionScope;
     private final String sourceLabel;
+    private final String sourceUrl;
+    private final String sourceName;
     private final boolean sourceIsPdf;
     
 // Maakt een definitieve chunk met alle benodigde informatie    
     public ChunkEmbedding(String text, List<Double> embedding, int page, Set<String> functionScope) {
-        this(text, embedding, page, functionScope, null, false);
+        this(text, embedding, page, functionScope, null, null, null, false);
     }
 
 // Maakt een definitieve chunk met een optionele bronnaam voor Word- of PDF-bijlagen
     public ChunkEmbedding(String text, List<Double> embedding, int page, Set<String> functionScope, String sourceLabel) {
-        this(text, embedding, page, functionScope, sourceLabel, false);
+        this(text, embedding, page, functionScope, sourceLabel, null, null, false);
     }
 
     public ChunkEmbedding(String text, List<Double> embedding, int page, Set<String> functionScope, String sourceLabel, boolean sourceIsPdf) {
+        this(text, embedding, page, functionScope, sourceLabel, null, null, sourceIsPdf);
+    }
+
+    public ChunkEmbedding(String text,
+                          List<Double> embedding,
+                          int page,
+                          Set<String> functionScope,
+                          String sourceLabel,
+                          String sourceUrl,
+                          String sourceName,
+                          boolean sourceIsPdf) {
         this.text = text;
         this.embedding = embedding;
         this.page = page;
@@ -48,6 +61,8 @@ public class ChunkEmbedding {
                 ? new LinkedHashSet<>()
                 : new LinkedHashSet<>(functionScope);
         this.sourceLabel = sourceLabel == null || sourceLabel.isBlank() ? null : sourceLabel.trim();
+        this.sourceUrl = sourceUrl == null || sourceUrl.isBlank() ? null : sourceUrl.trim();
+        this.sourceName = sourceName == null || sourceName.isBlank() ? null : sourceName.trim();
         this.sourceIsPdf = sourceIsPdf;
     }
 
@@ -74,6 +89,14 @@ public class ChunkEmbedding {
 // Optionele titel of bestandsnaam van de bron
     public String getSourceLabel() {
         return sourceLabel;
+    }
+
+    public String getSourceUrl() {
+        return sourceUrl;
+    }
+
+    public String getSourceName() {
+        return sourceName;
     }
 
     public boolean isSourcePdf() {

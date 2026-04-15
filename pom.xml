@@ -60,6 +60,13 @@
             <version>20240303</version>
         </dependency>
 
+        <!-- JSON serialisatie voor webarchieven -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
+
     </dependencies>
 
 </project>

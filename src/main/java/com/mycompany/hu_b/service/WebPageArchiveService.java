@@ -1,39 +1,30 @@
 package com.mycompany.hu_b.service;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import java.io.IOException;
+import java.io.Writer;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.stream.Collectors;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.PDPageContentStream;
-import org.apache.pdfbox.pdmodel.PDPageContentStream.AppendMode;
-import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.font.PDFont;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
-import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
-// Haalt webpagina's op, zet de tekst om naar een lokale PDF en bewaart die
-// in dezelfde map als de overige kennisbronnen.
-// De opgeslagen PDF's worden daarna door de bestaande kennisbron-loader ingelezen.
+// Haalt webpagina's op en bewaart de gescrapede inhoud als JSON-bestand.
+// De JSON bevat de url, titel, bronnaam en de tekstregels die later als kennisbron worden ingelezen.
 public class WebPageArchiveService {
 
     private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36";
-    private static final float PAGE_MARGIN = 48f;
-    private static final float TITLE_FONT_SIZE = 16f;
-    private static final float BODY_FONT_SIZE = 11f;
-    private static final float LINE_GAP = BODY_FONT_SIZE * 1.35f;
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-// Haalt meerdere webpagina's op en bewaart ze als PDF in de opgegeven map.
-// Als ophalen mislukt maar een eerdere cache-versie bestaat, gebruiken we die bestaande PDF.
+// Haalt meerdere webpagina's op en bewaart ze als JSON in de opgegeven map.
+// Als ophalen mislukt maar een eerdere cache-versie bestaat, gebruiken we die bestaande JSON.
     public List<Path> archivePages(List<String> urls, Path outputDirectory) throws IOException {
         List<Path> archivedFiles = new ArrayList<>();
         if (urls == null || urls.isEmpty()) {
@@ -52,9 +43,8 @@ public class WebPageArchiveService {
                 Path targetFile = archiveSinglePage(url, outputDirectory);
                 archivedFiles.add(targetFile);
             } catch (Exception ex) {
-                Path targetFile = outputDirectory.resolve(buildPdfFileName(url));
+                Path targetFile = outputDirectory.resolve(buildJsonFileName(url));
                 if (Files.exists(targetFile)) {
-                    // Oude cache is nog bruikbaar als de live-pagina tijdelijk niet bereikbaar is.
                     archivedFiles.add(targetFile);
                 } else {
                     failures.add(url + " -> " + ex.getMessage());
@@ -69,13 +59,14 @@ public class WebPageArchiveService {
         return archivedFiles;
     }
 
-// Haalt een webpagina op en schrijft de tekstuele inhoud weg als PDF.
+// Haalt een webpagina op en schrijft de tekstuele inhoud weg als JSON.
     private Path archiveSinglePage(String url, Path outputDirectory) throws IOException {
         Document document = fetchDocument(url);
         String title = extractTitle(document, url);
-        List<String> lines = extractContentLines(document, url);
-        Path targetFile = outputDirectory.resolve(buildPdfFileName(url));
-        writePdf(targetFile, title, url, lines);
+        String source = extractSource(document, url);
+        List<String> contentLines = extractContentLines(document, url);
+        Path targetFile = outputDirectory.resolve(buildJsonFileName(url));
+        writeJson(targetFile, url, title, source, contentLines);
         return targetFile;
     }
 
@@ -88,7 +79,7 @@ public class WebPageArchiveService {
                 .get();
     }
 
-// Bepaalt een titel voor de PDF op basis van de pagina-tekst.
+// Bepaalt een titel op basis van de pagina-tekst.
 // Als een h1 ontbreekt, vallen we terug op de HTML-titel of de URL.
     private String extractTitle(Document document, String url) {
         if (document == null) {
@@ -105,6 +96,29 @@ public class WebPageArchiveService {
         }
 
         return fallbackTitleFromUrl(url);
+    }
+
+// Bepaalt de bronnaam van de webpagina op basis van het domein.
+    private String extractSource(Document document, String url) {
+        String host = null;
+
+        if (url != null && !url.isBlank()) {
+            try {
+                URI uri = URI.create(url.trim());
+                host = uri.getHost();
+            } catch (IllegalArgumentException ignored) {
+                host = null;
+            }
+        }
+
+        if (host == null || host.isBlank()) {
+            return document != null && document.title() != null && !document.title().isBlank()
+                    ? document.title().trim()
+                    : "webpagina";
+        }
+
+        String normalized = host.toLowerCase(Locale.ROOT).replaceFirst("^www\\.", "");
+        return normalized;
     }
 
 // Haalt de tekstuele inhoud uit de webpagina.
@@ -162,150 +176,36 @@ public class WebPageArchiveService {
             String rowText = cells.stream()
                     .map(String::trim)
                     .filter(text -> !text.isBlank())
-                    .collect(Collectors.joining(" | "));
+                    .reduce((left, right) -> left + " | " + right)
+                    .orElse("");
             if (!rowText.isBlank()) {
                 lines.add(rowText);
             }
         }
     }
 
-// Schrijft de opgehaalde webpagina weg als PDF.
-// De PDF is een tekstuele snapshot, niet een visuele kopie van de originele website.
-    private void writePdf(Path outputFile, String title, String url, List<String> lines) throws IOException {
-        try (PDDocument document = new PDDocument()) {
-            PDFont regular = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
-            PDFont bold = new PDType1Font(Standard14Fonts.FontName.HELVETICA_BOLD);
-
-            PdfWriteState state = new PdfWriteState();
-            state.page = new PDPage(PDRectangle.A4);
-            document.addPage(state.page);
-
-            float pageWidth = state.page.getMediaBox().getWidth();
-            float pageHeight = state.page.getMediaBox().getHeight();
-            float usableWidth = pageWidth - (PAGE_MARGIN * 2);
-            state.y = pageHeight - PAGE_MARGIN;
-
-            state.contentStream = new PDPageContentStream(document, state.page, AppendMode.OVERWRITE, true, true);
-            state.contentStream.beginText();
-            state.contentStream.setLeading(LINE_GAP);
-            state.contentStream.setFont(bold, TITLE_FONT_SIZE);
-            state.contentStream.newLineAtOffset(PAGE_MARGIN, state.y);
-
-            for (String titleLine : wrapText(title, bold, TITLE_FONT_SIZE, usableWidth)) {
-                state = writeLine(document, state, bold, TITLE_FONT_SIZE, titleLine);
-            }
-
-            state = writeLine(document, state, regular, BODY_FONT_SIZE, "");
-            state = writeLine(document, state, regular, BODY_FONT_SIZE, "Bron URL: " + url);
-            state = writeLine(document, state, regular, BODY_FONT_SIZE, "");
-
-            for (String rawLine : lines) {
-                if (rawLine == null) {
-                    continue;
-                }
-
-                if (rawLine.isBlank()) {
-                    state = writeLine(document, state, regular, BODY_FONT_SIZE, "");
-                    continue;
-                }
-
-                PDFont font = rawLine.equals(rawLine.toUpperCase(Locale.ROOT)) && rawLine.length() < 120
-                        ? bold
-                        : regular;
-                String line = rawLine;
-                for (String wrappedLine : wrapText(line, font, BODY_FONT_SIZE, usableWidth)) {
-                    state = writeLine(document, state, font, BODY_FONT_SIZE, wrappedLine);
-                }
-            }
-
-            state.contentStream.endText();
-            state.contentStream.close();
-
-            document.save(outputFile.toFile());
+// Schrijft de webpagina weg als JSON-bestand.
+    private void writeJson(Path outputFile, String url, String title, String source, List<String> contentLines) throws IOException {
+        WebPageArchiveRecord record = new WebPageArchiveRecord(url, title, source, contentLines);
+        try (Writer writer = Files.newBufferedWriter(outputFile)) {
+            GSON.toJson(record, writer);
         }
     }
 
-// Schrijft één regel weg en maakt indien nodig een nieuwe pagina aan.
-    private PdfWriteState writeLine(PDDocument document,
-                            PdfWriteState state,
-                            PDFont font,
-                            float fontSize,
-                            String line) throws IOException {
-        float minY = PAGE_MARGIN;
-        float lineHeight = fontSize * 1.35f;
-
-        if (state.y - lineHeight < minY) {
-            state.contentStream.endText();
-            state.contentStream.close();
-
-            state.page = new PDPage(PDRectangle.A4);
-            document.addPage(state.page);
-            state.contentStream = new PDPageContentStream(document, state.page, AppendMode.OVERWRITE, true, true);
-            state.contentStream.beginText();
-            state.contentStream.setLeading(lineHeight);
-            state.contentStream.setFont(font, fontSize);
-            state.y = state.page.getMediaBox().getHeight() - PAGE_MARGIN;
-            state.contentStream.newLineAtOffset(PAGE_MARGIN, state.y);
-        } else {
-            state.contentStream.setFont(font, fontSize);
-        }
-
-        if (line.isBlank()) {
-            state.contentStream.newLineAtOffset(0, -lineHeight);
-            state.y -= lineHeight;
-            return state;
-        }
-
-        state.contentStream.showText(escapePdfText(line));
-        state.contentStream.newLineAtOffset(0, -lineHeight);
-        state.y -= lineHeight;
-        return state;
-    }
-
-// Splitst een regel op zodat deze past binnen de beschikbare PDF-breedte.
-    private List<String> wrapText(String text, PDFont font, float fontSize, float maxWidth) throws IOException {
-        List<String> wrappedLines = new ArrayList<>();
-        if (text == null || text.isBlank()) {
-            wrappedLines.add("");
-            return wrappedLines;
-        }
-
-        StringBuilder currentLine = new StringBuilder();
-        for (String word : text.split("\\s+")) {
-            String testLine = currentLine.length() == 0 ? word : currentLine + " " + word;
-            float textWidth = font.getStringWidth(testLine) / 1000f * fontSize;
-            if (textWidth > maxWidth && currentLine.length() > 0) {
-                wrappedLines.add(currentLine.toString());
-                currentLine.setLength(0);
-                currentLine.append(word);
-            } else {
-                if (currentLine.length() > 0) {
-                    currentLine.append(' ');
+// Maakt een veilige bestandsnaam voor de opgeslagen JSON.
+    private String buildJsonFileName(String url) {
+        String hostPart = "webpagina";
+        if (url != null && !url.isBlank()) {
+            try {
+                URI uri = URI.create(url.trim());
+                if (uri.getHost() != null && !uri.getHost().isBlank()) {
+                    hostPart = uri.getHost().toLowerCase(Locale.ROOT).replaceFirst("^www\\.", "");
                 }
-                currentLine.append(word);
+            } catch (IllegalArgumentException ignored) {
+                hostPart = "webpagina";
             }
         }
 
-        if (currentLine.length() > 0) {
-            wrappedLines.add(currentLine.toString());
-        }
-
-        return wrappedLines;
-    }
-
-// Escaped tekst zodat PDFBox speciale tekens veilig kan schrijven.
-    private String escapePdfText(String text) {
-        if (text == null) {
-            return "";
-        }
-
-        return text.replace("\\", "\\\\")
-                .replace("(", "\\(")
-                .replace(")", "\\)");
-    }
-
-// Maakt een veilige bestandsnaam voor de opgeslagen PDF.
-    private String buildPdfFileName(String url) {
         String titlePart = fallbackTitleFromUrl(url).toLowerCase(Locale.ROOT);
         titlePart = titlePart.replaceAll("[^\\p{L}\\p{Nd}]+", "_")
                 .replaceAll("_+", "_")
@@ -315,7 +215,7 @@ public class WebPageArchiveService {
             titlePart = "webpagina";
         }
 
-        return "Rijksoverheid_" + titlePart + ".pdf";
+        return hostPart + "_" + titlePart + ".json";
     }
 
 // Valt terug op de laatste url-sectie als er geen duidelijke titel beschikbaar is.
@@ -345,10 +245,17 @@ public class WebPageArchiveService {
         return null;
     }
 
-// Houdt de actieve PDF-schrijfstatus bij terwijl we nieuwe pagina's toevoegen.
-    private static final class PdfWriteState {
-        private PDPage page;
-        private PDPageContentStream contentStream;
-        private float y;
+    private static final class WebPageArchiveRecord {
+        private final String url;
+        private final String title;
+        private final String source;
+        private final List<String> content;
+
+        private WebPageArchiveRecord(String url, String title, String source, List<String> content) {
+            this.url = url;
+            this.title = title;
+            this.source = source;
+            this.content = content == null ? List.of() : List.copyOf(content);
+        }
     }
 }

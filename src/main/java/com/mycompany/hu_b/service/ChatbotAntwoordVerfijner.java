@@ -1,6 +1,7 @@
 package com.mycompany.hu_b.service;
 
 import com.mycompany.hu_b.model.ChunkEmbedding;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -96,8 +97,24 @@ public class ChatbotAntwoordVerfijner {
         }
 
         String label = chunk.getSourceLabel();
+        String sourceName = chunk.getSourceName();
+        String sourceUrl = chunk.getSourceUrl();
         int page = chunk.getPage();
         String pageText = page > 0 ? "pagina " + page : null;
+
+        if ((sourceName != null && !sourceName.isBlank()) || (sourceUrl != null && !sourceUrl.isBlank())) {
+            String displayLabel = label != null && !label.isBlank()
+                    ? label
+                    : (sourceName != null && !sourceName.isBlank() ? sourceName : "webpagina");
+            List<String> parts = new ArrayList<>();
+            if (sourceName != null && !sourceName.isBlank()) {
+                parts.add("bron: " + sourceName);
+            }
+            if (sourceUrl != null && !sourceUrl.isBlank()) {
+                parts.add(sourceUrl);
+            }
+            return displayLabel + " (" + String.join(" | ", parts) + ")";
+        }
 
         if (label != null && !label.isBlank()) {
             if (chunk.isSourcePdf() && pageText != null) {
