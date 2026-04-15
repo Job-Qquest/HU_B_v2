@@ -89,6 +89,9 @@ public class ChatbotPrompt {
         String sourceName = chunk.getSourceName();
         String sourceUrl = chunk.getSourceUrl();
 
+        int page = chunk.getPage();
+        String pageText = page > 0 ? "pagina " + page : null;
+
         if ((sourceName != null && !sourceName.isBlank()) || (sourceUrl != null && !sourceUrl.isBlank())) {
             String displayLabel = label != null && !label.isBlank()
                     ? label
@@ -104,10 +107,14 @@ public class ChatbotPrompt {
         }
 
         if (label != null && !label.isBlank()) {
-            return label;
+            return pageText != null ? label + " (" + pageText + ")" : label;
         }
 
-        return "PAGINA " + chunk.getPage();
+        if (pageText != null) {
+            return pageText;
+        }
+
+        return "PAGINA " + page;
     }
 
 // Bouwt de volledige system prompt voor OpenAI
