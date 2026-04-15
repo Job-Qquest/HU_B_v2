@@ -28,14 +28,19 @@ public class ChunkEmbedding {
     private final int page;
     private final Set<String> functionScope;
     private final String sourceLabel;
+    private final boolean sourceIsPdf;
     
 // Maakt een definitieve chunk met alle benodigde informatie    
     public ChunkEmbedding(String text, List<Double> embedding, int page, Set<String> functionScope) {
-        this(text, embedding, page, functionScope, null);
+        this(text, embedding, page, functionScope, null, false);
     }
 
 // Maakt een definitieve chunk met een optionele bronnaam voor Word- of PDF-bijlagen
     public ChunkEmbedding(String text, List<Double> embedding, int page, Set<String> functionScope, String sourceLabel) {
+        this(text, embedding, page, functionScope, sourceLabel, false);
+    }
+
+    public ChunkEmbedding(String text, List<Double> embedding, int page, Set<String> functionScope, String sourceLabel, boolean sourceIsPdf) {
         this.text = text;
         this.embedding = embedding;
         this.page = page;
@@ -43,6 +48,7 @@ public class ChunkEmbedding {
                 ? new LinkedHashSet<>()
                 : new LinkedHashSet<>(functionScope);
         this.sourceLabel = sourceLabel == null || sourceLabel.isBlank() ? null : sourceLabel.trim();
+        this.sourceIsPdf = sourceIsPdf;
     }
 
 // Tekst van de chunk
@@ -68,5 +74,9 @@ public class ChunkEmbedding {
 // Optionele titel of bestandsnaam van de bron
     public String getSourceLabel() {
         return sourceLabel;
+    }
+
+    public boolean isSourcePdf() {
+        return sourceIsPdf;
     }
 }

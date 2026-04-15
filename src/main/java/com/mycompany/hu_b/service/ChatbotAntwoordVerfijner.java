@@ -95,11 +95,22 @@ public class ChatbotAntwoordVerfijner {
             return "N.v.t.";
         }
 
-        if (chunk.getSourceLabel() != null && !chunk.getSourceLabel().isBlank()) {
-            return chunk.getSourceLabel();
+        String label = chunk.getSourceLabel();
+        int page = chunk.getPage();
+        String pageText = page > 0 ? "pagina " + page : null;
+
+        if (label != null && !label.isBlank()) {
+            if (chunk.isSourcePdf() && pageText != null) {
+                return label + " (" + pageText + ")";
+            }
+            return label;
         }
 
-        return "PAGINA " + chunk.getPage();
+        if (chunk.isSourcePdf() && pageText != null) {
+            return pageText;
+        }
+
+        return page > 0 ? "PAGINA " + page : "N.v.t.";
     }
 
 // Bepaalt of een chunk relevant is voor het antwoord

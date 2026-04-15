@@ -92,6 +92,7 @@ public class PdfProcessing {
         Path pdfFile = Path.of(pdfPath).toAbsolutePath().normalize();
         Set<Path> linkedWordFiles = discoverLinkedWordFiles(pdfFile);
 
+        String sourceLabel = buildSourceLabel(pdfFile);
         try (PDDocument doc = Loader.loadPDF(pdfFile.toFile())) {
             PDFTextStripper stripper = new PDFTextStripper();
 // Houdt bij welke functie-scope actief is tijdens het lezen
@@ -110,7 +111,13 @@ public class PdfProcessing {
 
 // Maakt van elke draft een definitieve chunk met embedding
                 for (ChunkDraft draft : drafts) {
-                    chunks.add(new ChunkEmbedding(draft.getText(), openAIService.embed(draft.getText()), page, draft.getFunctionScope()));
+                    chunks.add(new ChunkEmbedding(
+                            draft.getText(),
+                            openAIService.embed(draft.getText()),
+                            page,
+                            draft.getFunctionScope(),
+                            sourceLabel,
+                            true));
                 }
             }
         }
@@ -150,6 +157,7 @@ public class PdfProcessing {
 
 // Leest een extra PDF-bron op dezelfde manier als de hoofdgids.
     private void loadSupplementaryPdf(Path pdfPath) throws Exception {
+        String sourceLabel = buildSourceLabel(pdfPath);
         // Extra PDF-bronnen worden op dezelfde manier verwerkt als de hoofdgids.
         try (PDDocument doc = Loader.loadPDF(pdfPath.toFile())) {
             PDFTextStripper stripper = new PDFTextStripper();
@@ -163,7 +171,13 @@ public class PdfProcessing {
                 List<ChunkDraft> drafts = chunkTextWithFunctionScope(pageText, 800, activeFunctionScope);
 
                 for (ChunkDraft draft : drafts) {
-                    chunks.add(new ChunkEmbedding(draft.getText(), openAIService.embed(draft.getText()), page, draft.getFunctionScope()));
+                    chunks.add(new ChunkEmbedding(
+                            draft.getText(),
+                            openAIService.embed(draft.getText()),
+                            page,
+                            draft.getFunctionScope(),
+                            sourceLabel,
+                            true));
                 }
             }
         }
