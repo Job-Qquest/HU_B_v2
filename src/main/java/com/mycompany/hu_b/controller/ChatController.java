@@ -114,7 +114,8 @@ public class ChatController {
                         "Pensioenreglement ZwitserLeven 1-1-2018.pdf",
                         "Pensioenreglement ZwitserLeven Bijlagen 1-1-2018.pdf",
                         "PG4 - Vergoedingen.pdf",
-                        "Psychosociale arbeidsbelasting.docx"
+                        "Psychosociale arbeidsbelasting.docx",
+                        "Werkwijzer-Poortwachter.pdf"
                 ));
                 for (Path webArchiveFile : webArchiveFiles) {
                     supplementarySources.add(webArchiveFile.toString());
