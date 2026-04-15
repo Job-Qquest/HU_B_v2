@@ -25,39 +25,57 @@ public class ChatbotPrompt {
 // Bouwt de contexttekst die naar OpenAI wordt gestuurd
     public String buildContextText(List<ChunkEmbedding> topChunks,
                                    Map<Integer, ChunkEmbedding> sourceById) {
+        return buildContextText(topChunks, List.of(), sourceById);
+    }
+
+// Bouwt de contexttekst voor gids- en externe chunks, met gids eerst.
+    public String buildContextText(List<ChunkEmbedding> guideChunks,
+                                   List<ChunkEmbedding> externalChunks,
+                                   Map<Integer, ChunkEmbedding> sourceById) {
 
         StringBuilder contextText = new StringBuilder();
         int sourceId = 1;
 
-// Loopt door alle gevonden chunks
-        for (ChunkEmbedding c : topChunks) {
-// Bepaalt voor welke functie deze chunk geldt
-            Set<String> chunkFunctions = (c.getFunctionScope() == null || c.getFunctionScope().isEmpty())
-                    ? knowledgeService.detectFunctionLabels(c.getText())
-                    : c.getFunctionScope();
-
-// Als er geen functielabel is -> markeer als ALGEMEEN
-            String functionMarker = chunkFunctions.isEmpty()
-                    ? "ALGEMEEN"
-                    : String.join(", ", chunkFunctions);
-
-// Koppel deze chunk aan een Bron-ID
+        contextText.append("[PERSONEELSGIDS]\n");
+// Loopt door de gevonden gidschunks
+        for (ChunkEmbedding c : guideChunks) {
             sourceById.put(sourceId, c);
+            appendContextChunk(contextText, sourceId, c);
+            sourceId++;
+        }
 
-            contextText.append("BRON ")
-                    .append(sourceId)
-                    .append(" | ")
-                    .append(formatSourceReference(c))
-                    .append(" | FUNCTIEAFHANKELIJK: ")
-                    .append(functionMarker)
-                    .append(": ")
-                    .append(c.getText())
-                    .append("\n\n");
-
+        contextText.append("\n[EXTERNE BRONNEN]\n");
+// Loopt door de externe chunks
+        for (ChunkEmbedding c : externalChunks) {
+            sourceById.put(sourceId, c);
+            appendContextChunk(contextText, sourceId, c);
             sourceId++;
         }
 
         return contextText.toString();
+    }
+
+    private void appendContextChunk(StringBuilder contextText, int sourceId, ChunkEmbedding c) {
+// Bepaalt voor welke functie deze chunk geldt
+        Set<String> chunkFunctions = (c.getFunctionScope() == null || c.getFunctionScope().isEmpty())
+                ? knowledgeService.detectFunctionLabels(c.getText())
+                : c.getFunctionScope();
+
+// Als er geen functielabel is -> markeer als ALGEMEEN
+        String functionMarker = chunkFunctions.isEmpty()
+                ? "ALGEMEEN"
+                : String.join(", ", chunkFunctions);
+
+// Koppel deze chunk aan een Bron-ID
+        contextText.append("BRON ")
+                .append(sourceId)
+                .append(" | ")
+                .append(formatSourceReference(c))
+                .append(" | FUNCTIEAFHANKELIJK: ")
+                .append(functionMarker)
+                .append(": ")
+                .append(c.getText())
+                .append("\n\n");
     }
 
 // Maakt een leesbare bronverwijzing voor de context.
@@ -118,6 +136,9 @@ public class ChatbotPrompt {
 "- uitsluitend bron-ID's noemen die in de context voorkomen (BRON X), " +
 "- geen paginanummers zelf uitschrijven. " +
 "- splits de bronvermelding met een enter van de rest van het antwoord. " +
+"- geef voorrang aan de PERSONEELSGIDS boven EXTERNE BRONNEN. " +
+"- gebruik externe bronnen alleen als aanvulling of wanneer de personeelsgids het antwoord niet bevat. " +
+"- als personeelsgids en externe bron botsen, volg de personeelsgids. " +
 
 "5. Toon: Professioneel en behulpzaam, maar kortaf waar nodig om feitelijkheid te bewaren. " +
 

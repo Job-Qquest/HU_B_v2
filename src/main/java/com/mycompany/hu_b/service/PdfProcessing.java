@@ -47,6 +47,9 @@ public class PdfProcessing {
 // Lijst met alle chunks uit de gids, inclusief embedding, pagina en functiescope
     private final List<ChunkEmbedding> chunks = new ArrayList<>();
     private static final Pattern WORD_FILE_PATTERN = Pattern.compile("(?i)([\\w\\-() ]+\\.docx?|[\\w\\-() ]+\\.doc)");
+    private static final double GUIDE_THRESHOLD = 0.65;
+    private static final double MIN_SIMILARITY = 0.3;
+    private static final int MAX_RESULTS = 8;
     private final OpenAI openAIService;
 
     public PdfProcessing(OpenAI openAIService) {
@@ -116,15 +119,16 @@ public class PdfProcessing {
 
 // Maakt van elke draft een definitieve chunk met embedding
                 for (ChunkDraft draft : drafts) {
-                    chunks.add(new ChunkEmbedding(
-                            draft.getText(),
-                            openAIService.embed(draft.getText()),
-                            page,
-                            draft.getFunctionScope(),
-                            sourceLabel,
-                            null,
-                            null,
-                            true));
+            chunks.add(new ChunkEmbedding(
+                    draft.getText(),
+                    openAIService.embed(draft.getText()),
+                    page,
+                    draft.getFunctionScope(),
+                    sourceLabel,
+                    null,
+                    null,
+                    true,
+                    true));
                 }
             }
         }
@@ -225,6 +229,7 @@ public class PdfProcessing {
                     sourceLabel,
                     sourceUrl,
                     sourceName,
+                    false,
                     false));
         }
     }
@@ -311,7 +316,8 @@ public class PdfProcessing {
                             sourceLabel,
                             null,
                             null,
-                            true));
+                            true,
+                            false));
                 }
             }
         }
@@ -336,6 +342,7 @@ public class PdfProcessing {
                         sourceLabel,
                         null,
                         null,
+                        false,
                         false));
             }
             pageNumber++;
@@ -660,8 +667,8 @@ public class PdfProcessing {
         }
         return dot / (Math.sqrt(na) * Math.sqrt(nb));
     }
-// Zoekt de meest relevante chunks voor een query
-    public List<ChunkEmbedding> search(String query) throws Exception {
+// Zoekt de meest relevante chunks voor een query en splitst ze op in gids- en externe bronnen.
+    public SearchResult search(String query) throws Exception {
         String retrievalQuery = buildRetrievalQuery(query);
         List<Double> qVec = openAIService.embed(retrievalQuery);
 
@@ -678,32 +685,64 @@ public class PdfProcessing {
         scoredChunks.sort((a, b)
                 -> Double.compare(b.getValue(), a.getValue()));
 
-        double MIN_SIMILARITY = 0.3;
-        int MAX_RESULTS = 8;
-
-        List<ChunkEmbedding> results = new ArrayList<>();
-        Set<ChunkEmbedding> added = new HashSet<>();
-
 // Bepaal speciale kenmerken van de vraag
         boolean talentclassVraag = isTalentclassQuestion(query);
         boolean referralVraag = isReferralQuestion(query);
         Set<String> functionLabels = detectFunctionLabels(query);
-// Eerste ronde: alleen chunks boven minimum similarity
+        List<Map.Entry<ChunkEmbedding, Double>> guideCandidates = new ArrayList<>();
+        List<Map.Entry<ChunkEmbedding, Double>> externalCandidates = new ArrayList<>();
+
         for (Map.Entry<ChunkEmbedding, Double> entry : scoredChunks) {
+            ChunkEmbedding candidate = entry.getKey();
+            if (!isValidCandidate(candidate, functionLabels, talentclassVraag, referralVraag)) {
+                continue;
+            }
+
+            if (candidate.isPrimaryGuide()) {
+                guideCandidates.add(entry);
+            } else {
+                externalCandidates.add(entry);
+            }
+        }
+
+        List<ChunkEmbedding> guideChunks = collectTopChunks(guideCandidates);
+        List<ChunkEmbedding> externalChunks = collectTopChunks(externalCandidates);
+        double guideScore = guideCandidates.isEmpty() ? 0.0 : guideCandidates.get(0).getValue();
+
+        return new SearchResult(guideChunks, externalChunks, guideScore);
+    }
+
+// Filtert chunks op basis van de bestaande zoekregels.
+    private boolean isValidCandidate(ChunkEmbedding candidate,
+                                     Set<String> functionLabels,
+                                     boolean talentclassVraag,
+                                     boolean referralVraag) {
+        if (candidate == null || candidate.getText() == null || candidate.getText().isBlank()) {
+            return false;
+        }
+
+        if (!functionLabels.isEmpty() && !matchesFunctionScope(candidate, functionLabels)) {
+            return false;
+        }
+
+        if (talentclassVraag && !referralVraag && !isTalentclassChunk(candidate)) {
+            return false;
+        }
+
+        return true;
+    }
+
+// Haalt de best scorende chunks op binnen dezelfde bestaande zoeklogica.
+    private List<ChunkEmbedding> collectTopChunks(List<Map.Entry<ChunkEmbedding, Double>> scoredCandidates) {
+        List<ChunkEmbedding> results = new ArrayList<>();
+        Set<ChunkEmbedding> added = new HashSet<>();
+
+        for (Map.Entry<ChunkEmbedding, Double> entry : scoredCandidates) {
             if (entry.getValue() < MIN_SIMILARITY) {
                 break;
             }
 
             ChunkEmbedding candidate = entry.getKey();
-// Als er functie-labels in de vraag zitten, dan moet chunk matchen met die scope
-            if (!functionLabels.isEmpty() && !matchesFunctionScope(candidate, functionLabels)) {
-                continue;
-            }
-// Alleen chunks accepteren die echt Talentclass-gerelateerd zijn
-            if (talentclassVraag && !referralVraag && !isTalentclassChunk(candidate)) {
-                continue;
-            }
-// Voegt geldige chunk toe
             if (candidate.getText() != null && !candidate.getText().isBlank() && added.add(candidate)) {
                 results.add(candidate);
             }
@@ -712,17 +751,9 @@ public class PdfProcessing {
                 return results;
             }
         }
-// Tweede ronde: vul aan met lagere scores als er nog te weinig resultaten zijn
-        for (Map.Entry<ChunkEmbedding, Double> entry : scoredChunks) {
+
+        for (Map.Entry<ChunkEmbedding, Double> entry : scoredCandidates) {
             ChunkEmbedding candidate = entry.getKey();
-
-            if (!functionLabels.isEmpty() && !matchesFunctionScope(candidate, functionLabels)) {
-                continue;
-            }
-
-            if (talentclassVraag && !referralVraag && !isTalentclassChunk(candidate)) {
-                continue;
-            }
 
             if (candidate.getText() != null && !candidate.getText().isBlank() && added.add(candidate)) {
                 results.add(candidate);
@@ -857,5 +888,37 @@ public class PdfProcessing {
                 || normalized.contains("aandragen")
                 || normalized.contains("iemand aanbreng")
                 || normalized.contains("iemand voordraag");
+    }
+
+    public double getGuideThreshold() {
+        return GUIDE_THRESHOLD;
+    }
+
+    public static final class SearchResult {
+        private final List<ChunkEmbedding> guideChunks;
+        private final List<ChunkEmbedding> externalChunks;
+        private final double guideScore;
+
+        private SearchResult(List<ChunkEmbedding> guideChunks, List<ChunkEmbedding> externalChunks, double guideScore) {
+            this.guideChunks = guideChunks;
+            this.externalChunks = externalChunks;
+            this.guideScore = guideScore;
+        }
+
+        public List<ChunkEmbedding> getGuideChunks() {
+            return guideChunks;
+        }
+
+        public List<ChunkEmbedding> getExternalChunks() {
+            return externalChunks;
+        }
+
+        public double getGuideScore() {
+            return guideScore;
+        }
+
+        public boolean isGuideSufficient() {
+            return guideScore >= GUIDE_THRESHOLD;
+        }
     }
 }

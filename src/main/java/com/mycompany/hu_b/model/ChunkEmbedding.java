@@ -31,19 +31,20 @@ public class ChunkEmbedding {
     private final String sourceUrl;
     private final String sourceName;
     private final boolean sourceIsPdf;
+    private final boolean primaryGuide;
     
 // Maakt een definitieve chunk met alle benodigde informatie    
     public ChunkEmbedding(String text, List<Double> embedding, int page, Set<String> functionScope) {
-        this(text, embedding, page, functionScope, null, null, null, false);
+        this(text, embedding, page, functionScope, null, null, null, false, false);
     }
 
 // Maakt een definitieve chunk met een optionele bronnaam voor Word- of PDF-bijlagen
     public ChunkEmbedding(String text, List<Double> embedding, int page, Set<String> functionScope, String sourceLabel) {
-        this(text, embedding, page, functionScope, sourceLabel, null, null, false);
+        this(text, embedding, page, functionScope, sourceLabel, null, null, false, false);
     }
 
     public ChunkEmbedding(String text, List<Double> embedding, int page, Set<String> functionScope, String sourceLabel, boolean sourceIsPdf) {
-        this(text, embedding, page, functionScope, sourceLabel, null, null, sourceIsPdf);
+        this(text, embedding, page, functionScope, sourceLabel, null, null, sourceIsPdf, false);
     }
 
     public ChunkEmbedding(String text,
@@ -54,6 +55,18 @@ public class ChunkEmbedding {
                           String sourceUrl,
                           String sourceName,
                           boolean sourceIsPdf) {
+        this(text, embedding, page, functionScope, sourceLabel, sourceUrl, sourceName, sourceIsPdf, false);
+    }
+
+    public ChunkEmbedding(String text,
+                          List<Double> embedding,
+                          int page,
+                          Set<String> functionScope,
+                          String sourceLabel,
+                          String sourceUrl,
+                          String sourceName,
+                          boolean sourceIsPdf,
+                          boolean primaryGuide) {
         this.text = text;
         this.embedding = embedding;
         this.page = page;
@@ -64,6 +77,7 @@ public class ChunkEmbedding {
         this.sourceUrl = sourceUrl == null || sourceUrl.isBlank() ? null : sourceUrl.trim();
         this.sourceName = sourceName == null || sourceName.isBlank() ? null : sourceName.trim();
         this.sourceIsPdf = sourceIsPdf;
+        this.primaryGuide = primaryGuide;
     }
 
 // Tekst van de chunk
@@ -101,5 +115,9 @@ public class ChunkEmbedding {
 
     public boolean isSourcePdf() {
         return sourceIsPdf;
+    }
+
+    public boolean isPrimaryGuide() {
+        return primaryGuide;
     }
 }
