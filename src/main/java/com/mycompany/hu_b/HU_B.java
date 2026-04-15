@@ -1,4 +1,4 @@
-// Dit is de opstartclass van de applicatie..
+// Dit is de opstartclass van de applicatie?
 // Deze class bevat alleen de main-methode en start het hoofdvenster van de chatbot
 
 package com.mycompany.hu_b;
