@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-// Bouwt het uiteindelijke chatbotantwoord op.
+// Bouwt het uiteindelijke chatbotantwoord op..
 // De class haalt relevante chunks op uit PdfProcessing,
 // stelt de prompt samen voor het AI-model,
 // verwerkt speciale gevallen zoals vragen over verzuimduur,
