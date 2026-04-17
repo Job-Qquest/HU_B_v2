@@ -48,12 +48,12 @@ public class PdfProcessing {
     private final List<ChunkEmbedding> chunks = new ArrayList<>();
     private static final Pattern WORD_FILE_PATTERN = Pattern.compile("(?i)([\\w\\-() ]+\\.docx?|[\\w\\-() ]+\\.doc)");
     private static final double GUIDE_THRESHOLD = 0.65;
-    private static final double MIN_SIMILARITY = 0.3;
+    private static final double MIN_SIMILARITY = 0.15;
     private static final int MAX_RESULTS = 6;
-    private static final int MIN_GUIDE_RESULTS = 3;
-    private static final double GUIDE_WEIGHT = 1.2;
-    private static final double EXTERNAL_WEIGHT = 0.9;
-    private static final double MAX_DUPLICATE_SIMILARITY = 0.92;
+    private static final int MIN_GUIDE_RESULTS = 1;
+    private static final double GUIDE_WEIGHT = 1.1;
+    private static final double EXTERNAL_WEIGHT = 1.0;
+    private static final double MAX_DUPLICATE_SIMILARITY = 0.97;
     private final OpenAI openAIService;
 
     public PdfProcessing(OpenAI openAIService) {
@@ -778,8 +778,16 @@ public class PdfProcessing {
                 continue;
             }
 
-            if (cosine(existing.getEmbedding(), candidate.getEmbedding()) > MAX_DUPLICATE_SIMILARITY) {
-                return false;
+            double similarity = cosine(existing.getEmbedding(), candidate.getEmbedding());
+
+            if (similarity > MAX_DUPLICATE_SIMILARITY) {
+
+                // Alleen skippen als zelfde type bron
+                if (existing.isPrimaryGuide() == candidate.isPrimaryGuide()) {
+                    return false;
+                }
+
+                // Guide en extern mogen naast elkaar bestaan
             }
         }
 
