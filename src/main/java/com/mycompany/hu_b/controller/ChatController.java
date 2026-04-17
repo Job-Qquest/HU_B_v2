@@ -124,13 +124,6 @@ public class ChatController {
                     System.out.println("lijstWebsites.txt niet gevonden op " + websitesList);
                 }
 
-//                if (websiteLinks.isEmpty()) {
-//                    websiteLinks = List.of(
-//                            "https://www.rijksoverheid.nl/onderwerpen/vakantiedagen-en-vakantiegeld/vraag-en-antwoord/hoe-kan-ik-mijn-vakantiedagen-opnemen",
-//                            "https://www.rijksoverheid.nl/onderwerpen/arbeidsovereenkomst-en-cao/vraag-en-antwoord/welke-soorten-verlof-zijn-er"
-//                    );
-//                }
-
                 List<Path> webArchiveFiles = webPageArchiveService.archivePages(websiteLinks, archiveDirectory);
                 
                 
@@ -152,11 +145,9 @@ public class ChatController {
                                 || lowerName.endsWith(".doc")
                                 || lowerName.endsWith(".docx")) {
                             supplementarySources.add(lowerName);
-                            System.out.println(name);
                         }
                     }
                 }
-                System.out.println(supplementarySources);
                 //// Laad de personeelsgids en maak embeddings.
 //// De extra documenten komen uit de PDF en de webpagina's worden eerst lokaal als JSON opgeslagen.
 //                List<String> supplementarySources = new ArrayList<>(List.of(
