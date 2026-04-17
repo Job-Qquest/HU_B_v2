@@ -11,6 +11,7 @@ import com.mycompany.hu_b.service.WebPageArchiveService;
 import com.mycompany.hu_b.ui.AppVenster;
 import com.mycompany.hu_b.util.HttpRetriesTimeouts;
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -98,26 +99,45 @@ public class ChatController {
 // Laat eerst de webpagina's archiveren naar lokale JSON-bestanden in dezelfde map als de gids.
                 Path guideFile = Path.of(resolveGuidePath()).toAbsolutePath().normalize();
                 Path archiveDirectory = guideFile.getParent();
-                String archiveDirectories = archiveDirectory.toString();
                 if (archiveDirectory == null) {
                     // Fallback voor het geval de gids zonder oudermap wordt aangeroepen.
                     archiveDirectory = Path.of(".").toAbsolutePath().normalize();
                 }
+                String archiveDirectories = archiveDirectory.toString();
                 
-                Path guideWebsites = Path.of("lijstWebsites.txt").toAbsolutePath().normalize();
-                
-                
-                List<Path> webArchiveFiles = webPageArchiveService.archivePages(
-                        List.of(
-                                "https://www.rijksoverheid.nl/onderwerpen/vakantiedagen-en-vakantiegeld/vraag-en-antwoord/hoe-kan-ik-mijn-vakantiedagen-opnemen",
-                                "https://www.rijksoverheid.nl/onderwerpen/arbeidsovereenkomst-en-cao/vraag-en-antwoord/welke-soorten-verlof-zijn-er"
-                        ),
-                        archiveDirectory);
+                //Leest bestand lijstWebsites.txt en maakt een lijst met websitelinks
+                //die wordt gebruikt om te scrapen
+                Path websitesList = Path.of("lijstWebsites.txt").toAbsolutePath().normalize();
+                List<String> websiteLinks = new ArrayList<>();
+                if (Files.exists(websitesList)) {
+                    for (String rawLink : Files.readAllLines(websitesList)) {
+                        if (rawLink == null) {
+                            continue;
+                        }
 
+                        String trimmed = rawLink.trim();
+                        if (!trimmed.isEmpty()) {
+                            websiteLinks.add(trimmed);
+                        }
+                    }
+                } else {
+                    System.out.println("lijstWebsites.txt niet gevonden op " + websitesList);
+                }
+
+//                if (websiteLinks.isEmpty()) {
+//                    websiteLinks = List.of(
+//                            "https://www.rijksoverheid.nl/onderwerpen/vakantiedagen-en-vakantiegeld/vraag-en-antwoord/hoe-kan-ik-mijn-vakantiedagen-opnemen",
+//                            "https://www.rijksoverheid.nl/onderwerpen/arbeidsovereenkomst-en-cao/vraag-en-antwoord/welke-soorten-verlof-zijn-er"
+//                    );
+//                }
+
+                List<Path> webArchiveFiles = webPageArchiveService.archivePages(websiteLinks, archiveDirectory);
+                
+                
+                //Maakt een lijst met alle word en pdf bestanden in de map waar 
+                //de personeelsgids in staat
                 File directory = new File(archiveDirectories);
-
                 File[] files = directory.listFiles();
-
                 List<String> supplementarySources = new ArrayList<>();
 
                 if (files != null) {
