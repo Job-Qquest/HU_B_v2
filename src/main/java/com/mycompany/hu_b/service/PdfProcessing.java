@@ -49,7 +49,11 @@ public class PdfProcessing {
     private static final Pattern WORD_FILE_PATTERN = Pattern.compile("(?i)([\\w\\-() ]+\\.docx?|[\\w\\-() ]+\\.doc)");
     private static final double GUIDE_THRESHOLD = 0.65;
     private static final double MIN_SIMILARITY = 0.3;
-    private static final int MAX_RESULTS = 8;
+    private static final int MAX_RESULTS = 6;
+    private static final int MIN_GUIDE_RESULTS = 3;
+    private static final double GUIDE_WEIGHT = 1.2;
+    private static final double EXTERNAL_WEIGHT = 0.9;
+    private static final double MAX_DUPLICATE_SIMILARITY = 0.92;
     private final OpenAI openAIService;
 
     public PdfProcessing(OpenAI openAIService) {
@@ -671,45 +675,117 @@ public class PdfProcessing {
     public SearchResult search(String query) throws Exception {
         String retrievalQuery = buildRetrievalQuery(query);
         List<Double> qVec = openAIService.embed(retrievalQuery);
-
-        List<Map.Entry<ChunkEmbedding, Double>> scoredChunks = new ArrayList<>();
-
-        for (ChunkEmbedding c : chunks) {
-            double semanticScore = cosine(c.getEmbedding(), qVec);
-            double lexicalScore = lexicalSimilarity(retrievalQuery, c.getText());
-// Combineert semantic en lexical score
-            double score = (semanticScore * 0.80) + (lexicalScore * 0.20);
-            scoredChunks.add(Map.entry(c, score));
-        }
-// Sorteer van hoogste naar laagste score
-        scoredChunks.sort((a, b)
-                -> Double.compare(b.getValue(), a.getValue()));
-
-// Bepaal speciale kenmerken van de vraag
         boolean talentclassVraag = isTalentclassQuestion(query);
         boolean referralVraag = isReferralQuestion(query);
         Set<String> functionLabels = detectFunctionLabels(query);
-        List<Map.Entry<ChunkEmbedding, Double>> guideCandidates = new ArrayList<>();
-        List<Map.Entry<ChunkEmbedding, Double>> externalCandidates = new ArrayList<>();
 
-        for (Map.Entry<ChunkEmbedding, Double> entry : scoredChunks) {
-            ChunkEmbedding candidate = entry.getKey();
-            if (!isValidCandidate(candidate, functionLabels, talentclassVraag, referralVraag)) {
+        List<ScoredChunk> scoredChunks = new ArrayList<>();
+
+        for (ChunkEmbedding c : chunks) {
+            if (!isValidCandidate(c, functionLabels, talentclassVraag, referralVraag)) {
                 continue;
             }
 
-            if (candidate.isPrimaryGuide()) {
-                guideCandidates.add(entry);
-            } else {
-                externalCandidates.add(entry);
+            double semanticScore = cosine(c.getEmbedding(), qVec);
+            double lexicalScore = lexicalSimilarity(retrievalQuery, c.getText());
+            double baseScore = (semanticScore * 0.80) + (lexicalScore * 0.20);
+            double weightedScore = baseScore * (c.isPrimaryGuide() ? GUIDE_WEIGHT : EXTERNAL_WEIGHT);
+            scoredChunks.add(new ScoredChunk(c, baseScore, weightedScore));
+        }
+// Sorteer van hoogste naar laagste score
+        scoredChunks.sort((a, b) -> Double.compare(b.getWeightedScore(), a.getWeightedScore()));
+
+        List<ChunkEmbedding> rankedChunks = collectBalancedChunks(scoredChunks);
+        double guideScore = scoredChunks.stream()
+                .filter(candidate -> candidate.getChunk().isPrimaryGuide())
+                .mapToDouble(ScoredChunk::getWeightedScore)
+                .max()
+                .orElse(0.0);
+
+        return new SearchResult(rankedChunks, guideScore);
+    }
+
+// Selecteert een globale, gebalanceerde top-lijst met guide-prioriteit en deduplicatie.
+    public List<ChunkEmbedding> collectBalancedChunks(List<ScoredChunk> scoredCandidates) {
+        List<ChunkEmbedding> selected = new ArrayList<>();
+        List<ChunkEmbedding> selectedEmbeddings = new ArrayList<>();
+        if (scoredCandidates == null || scoredCandidates.isEmpty()) {
+            return selected;
+        }
+
+        int guideAvailable = 0;
+        for (ScoredChunk scoredCandidate : scoredCandidates) {
+            if (scoredCandidate != null
+                    && scoredCandidate.getChunk() != null
+                    && scoredCandidate.getChunk().isPrimaryGuide()
+                    && scoredCandidate.getWeightedScore() >= MIN_SIMILARITY) {
+                guideAvailable++;
             }
         }
 
-        List<ChunkEmbedding> guideChunks = collectTopChunks(guideCandidates);
-        List<ChunkEmbedding> externalChunks = collectTopChunks(externalCandidates);
-        double guideScore = guideCandidates.isEmpty() ? 0.0 : guideCandidates.get(0).getValue();
+        int guideTarget = Math.min(MIN_GUIDE_RESULTS, guideAvailable);
 
-        return new SearchResult(guideChunks, externalChunks, guideScore);
+        for (ScoredChunk scoredCandidate : scoredCandidates) {
+            if (selected.size() >= MAX_RESULTS || guideTarget <= 0) {
+                break;
+            }
+
+            if (scoredCandidate == null || scoredCandidate.getChunk() == null) {
+                continue;
+            }
+
+            if (!scoredCandidate.getChunk().isPrimaryGuide()) {
+                continue;
+            }
+
+            if (scoredCandidate.getWeightedScore() < MIN_SIMILARITY) {
+                continue;
+            }
+
+            if (addIfNotDuplicate(selected, selectedEmbeddings, scoredCandidate.getChunk())) {
+                guideTarget--;
+            }
+        }
+
+        for (ScoredChunk scoredCandidate : scoredCandidates) {
+            if (selected.size() >= MAX_RESULTS) {
+                break;
+            }
+
+            if (scoredCandidate == null || scoredCandidate.getChunk() == null) {
+                continue;
+            }
+
+            if (scoredCandidate.getWeightedScore() < MIN_SIMILARITY) {
+                continue;
+            }
+
+            addIfNotDuplicate(selected, selectedEmbeddings, scoredCandidate.getChunk());
+        }
+
+        return selected;
+    }
+
+    private boolean addIfNotDuplicate(List<ChunkEmbedding> selected,
+                                      List<ChunkEmbedding> selectedEmbeddings,
+                                      ChunkEmbedding candidate) {
+        if (candidate == null || candidate.getText() == null || candidate.getText().isBlank()) {
+            return false;
+        }
+
+        for (ChunkEmbedding existing : selectedEmbeddings) {
+            if (existing == null || existing.getEmbedding() == null || candidate.getEmbedding() == null) {
+                continue;
+            }
+
+            if (cosine(existing.getEmbedding(), candidate.getEmbedding()) > MAX_DUPLICATE_SIMILARITY) {
+                return false;
+            }
+        }
+
+        selected.add(candidate);
+        selectedEmbeddings.add(candidate);
+        return true;
     }
 
 // Filtert chunks op basis van de bestaande zoekregels.
@@ -732,40 +808,6 @@ public class PdfProcessing {
         return true;
     }
 
-// Haalt de best scorende chunks op binnen dezelfde bestaande zoeklogica.
-    private List<ChunkEmbedding> collectTopChunks(List<Map.Entry<ChunkEmbedding, Double>> scoredCandidates) {
-        List<ChunkEmbedding> results = new ArrayList<>();
-        Set<ChunkEmbedding> added = new HashSet<>();
-
-        for (Map.Entry<ChunkEmbedding, Double> entry : scoredCandidates) {
-            if (entry.getValue() < MIN_SIMILARITY) {
-                break;
-            }
-
-            ChunkEmbedding candidate = entry.getKey();
-            if (candidate.getText() != null && !candidate.getText().isBlank() && added.add(candidate)) {
-                results.add(candidate);
-            }
-
-            if (results.size() >= MAX_RESULTS) {
-                return results;
-            }
-        }
-
-        for (Map.Entry<ChunkEmbedding, Double> entry : scoredCandidates) {
-            ChunkEmbedding candidate = entry.getKey();
-
-            if (candidate.getText() != null && !candidate.getText().isBlank() && added.add(candidate)) {
-                results.add(candidate);
-            }
-
-            if (results.size() >= MAX_RESULTS) {
-                break;
-            }
-        }
-
-        return results;
-    }
 // Verrijkt de zoekquery met extra synoniemen/verwante termen
 // Dit helpt om relevantere chunks terug te vinden
     public String buildRetrievalQuery(String query) {
@@ -895,22 +937,16 @@ public class PdfProcessing {
     }
 
     public static final class SearchResult {
-        private final List<ChunkEmbedding> guideChunks;
-        private final List<ChunkEmbedding> externalChunks;
+        private final List<ChunkEmbedding> rankedChunks;
         private final double guideScore;
 
-        private SearchResult(List<ChunkEmbedding> guideChunks, List<ChunkEmbedding> externalChunks, double guideScore) {
-            this.guideChunks = guideChunks;
-            this.externalChunks = externalChunks;
+        private SearchResult(List<ChunkEmbedding> rankedChunks, double guideScore) {
+            this.rankedChunks = rankedChunks;
             this.guideScore = guideScore;
         }
 
-        public List<ChunkEmbedding> getGuideChunks() {
-            return guideChunks;
-        }
-
-        public List<ChunkEmbedding> getExternalChunks() {
-            return externalChunks;
+        public List<ChunkEmbedding> getRankedChunks() {
+            return rankedChunks;
         }
 
         public double getGuideScore() {
@@ -919,6 +955,30 @@ public class PdfProcessing {
 
         public boolean isGuideSufficient() {
             return guideScore >= GUIDE_THRESHOLD;
+        }
+    }
+
+    public static final class ScoredChunk {
+        private final ChunkEmbedding chunk;
+        private final double baseScore;
+        private final double weightedScore;
+
+        private ScoredChunk(ChunkEmbedding chunk, double baseScore, double weightedScore) {
+            this.chunk = chunk;
+            this.baseScore = baseScore;
+            this.weightedScore = weightedScore;
+        }
+
+        public ChunkEmbedding getChunk() {
+            return chunk;
+        }
+
+        public double getBaseScore() {
+            return baseScore;
+        }
+
+        public double getWeightedScore() {
+            return weightedScore;
         }
     }
 }

@@ -25,7 +25,21 @@ public class ChatbotPrompt {
 // Bouwt de contexttekst die naar OpenAI wordt gestuurd
     public String buildContextText(List<ChunkEmbedding> topChunks,
                                    Map<Integer, ChunkEmbedding> sourceById) {
-        return buildContextText(topChunks, List.of(), sourceById);
+        StringBuilder contextText = new StringBuilder();
+        contextText.append("[GEWOGEN CONTEXT]\n");
+
+        int sourceId = 1;
+        if (topChunks != null) {
+            for (ChunkEmbedding c : topChunks) {
+                if (sourceById != null) {
+                    sourceById.put(sourceId, c);
+                }
+                appendContextChunk(contextText, sourceId, c);
+                sourceId++;
+            }
+        }
+
+        return contextText.toString();
     }
 
 // Bouwt de contexttekst voor gids- en externe chunks, met gids eerst.
@@ -56,10 +70,18 @@ public class ChatbotPrompt {
     }
 
     private void appendContextChunk(StringBuilder contextText, int sourceId, ChunkEmbedding c) {
+        if (c == null) {
+            return;
+        }
+
 // Bepaalt voor welke functie deze chunk geldt
         Set<String> chunkFunctions = (c.getFunctionScope() == null || c.getFunctionScope().isEmpty())
                 ? knowledgeService.detectFunctionLabels(c.getText())
                 : c.getFunctionScope();
+
+        String sourceType = c.isPrimaryGuide()
+                ? "PERSONEELSGIDS"
+                : "EXTERNE BRONNEN";
 
 // Als er geen functielabel is -> markeer als ALGEMEEN
         String functionMarker = chunkFunctions.isEmpty()
@@ -69,6 +91,8 @@ public class ChatbotPrompt {
 // Koppel deze chunk aan een Bron-ID
         contextText.append("BRON ")
                 .append(sourceId)
+                .append(" | ")
+                .append(sourceType)
                 .append(" | ")
                 .append(formatSourceReference(c))
                 .append(" | FUNCTIEAFHANKELIJK: ")
