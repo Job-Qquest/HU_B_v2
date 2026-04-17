@@ -10,15 +10,16 @@ import com.mycompany.hu_b.service.PdfProcessing;
 import com.mycompany.hu_b.service.WebPageArchiveService;
 import com.mycompany.hu_b.ui.AppVenster;
 import com.mycompany.hu_b.util.HttpRetriesTimeouts;
+import java.io.File;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import javax.swing.SwingUtilities;
 
 // De controller verwerkt verzonden vragen, controleert of de kennisbron geladen is,
 // start het laden van de personeelsgids en haalt antwoorden op via ChatbotAntwoord.
 // Resultaten en foutmeldingen worden teruggezet in het AppVenster (de UI).
-
 public class ChatController {
 
     private final AppVenster view;
@@ -40,7 +41,9 @@ public class ChatController {
 
 // Methode die wordt aangeroepen wanneer gebruiker een vraag stelt
     public void send(String question) {
-        if (question == null || question.trim().isEmpty()) return;
+        if (question == null || question.trim().isEmpty()) {
+            return;
+        }
 
         if (!knowledgeReady) {
             view.addAssistantBubble("De gids is nog niet klaar met laden. Probeer het zo opnieuw.");
@@ -63,8 +66,8 @@ public class ChatController {
                 String finalAnswer = answer;
 
 // Zet het antwoord terug in de UI
-                SwingUtilities.invokeLater(() ->
-                        view.addAssistantBubble(finalAnswer));
+                SwingUtilities.invokeLater(()
+                        -> view.addAssistantBubble(finalAnswer));
 
             } catch (Exception ex) {
                 ex.printStackTrace();
@@ -95,10 +98,15 @@ public class ChatController {
 // Laat eerst de webpagina's archiveren naar lokale JSON-bestanden in dezelfde map als de gids.
                 Path guideFile = Path.of(resolveGuidePath()).toAbsolutePath().normalize();
                 Path archiveDirectory = guideFile.getParent();
+                String archiveDirectories = archiveDirectory.toString();
                 if (archiveDirectory == null) {
                     // Fallback voor het geval de gids zonder oudermap wordt aangeroepen.
                     archiveDirectory = Path.of(".").toAbsolutePath().normalize();
                 }
+                
+                Path guideWebsites = Path.of("lijstWebsites.txt").toAbsolutePath().normalize();
+                
+                
                 List<Path> webArchiveFiles = webPageArchiveService.archivePages(
                         List.of(
                                 "https://www.rijksoverheid.nl/onderwerpen/vakantiedagen-en-vakantiegeld/vraag-en-antwoord/hoe-kan-ik-mijn-vakantiedagen-opnemen",
@@ -106,17 +114,40 @@ public class ChatController {
                         ),
                         archiveDirectory);
 
-// Laad de personeelsgids en maak embeddings.
-// De extra documenten komen uit de PDF en de webpagina's worden eerst lokaal als JSON opgeslagen.
-                List<String> supplementarySources = new ArrayList<>(List.of(
-                        "Adviezen m.b.t. gezond in een auto rijden.docx",
-                        "Gezond beeldschermwerk.docx",
-                        "Pensioenreglement ZwitserLeven 1-1-2018.pdf",
-                        "Pensioenreglement ZwitserLeven Bijlagen 1-1-2018.pdf",
-                        "PG4 - Vergoedingen.pdf",
-                        "Psychosociale arbeidsbelasting.docx",
-                        "Werkwijzer-Poortwachter.pdf"
-                ));
+                File directory = new File(archiveDirectories);
+
+                File[] files = directory.listFiles();
+
+                List<String> supplementarySources = new ArrayList<>();
+
+                if (files != null) {
+                    for (File file : files) {
+                        String name = file.getName();
+                        if (name == null) {
+                            continue;
+                        }
+
+                        String lowerName = name.toLowerCase(Locale.ROOT);
+                        if (lowerName.endsWith(".pdf")
+                                || lowerName.endsWith(".doc")
+                                || lowerName.endsWith(".docx")) {
+                            supplementarySources.add(lowerName);
+                            System.out.println(name);
+                        }
+                    }
+                }
+                System.out.println(supplementarySources);
+                //// Laad de personeelsgids en maak embeddings.
+//// De extra documenten komen uit de PDF en de webpagina's worden eerst lokaal als JSON opgeslagen.
+//                List<String> supplementarySources = new ArrayList<>(List.of(
+//                        "Adviezen m.b.t. gezond in een auto rijden.docx",
+//                        "Gezond beeldschermwerk.docx",
+//                        "Pensioenreglement ZwitserLeven 1-1-2018.pdf",
+//                        "Pensioenreglement ZwitserLeven Bijlagen 1-1-2018.pdf",
+//                        "PG4 - Vergoedingen.pdf",
+//                        "Psychosociale arbeidsbelasting.docx",
+//                        "Werkwijzer-Poortwachter.pdf"
+//                ));
                 for (Path webArchiveFile : webArchiveFiles) {
                     supplementarySources.add(webArchiveFile.toString());
                 }
