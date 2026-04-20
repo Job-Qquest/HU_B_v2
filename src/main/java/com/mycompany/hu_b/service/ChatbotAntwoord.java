@@ -1,7 +1,7 @@
 package com.mycompany.hu_b.service;
 
 import com.mycompany.hu_b.model.ChunkEmbedding;
-import com.mycompany.hu_b.service.PdfProcessing.SearchResult;
+import com.mycompany.hu_b.service.KnowledgeProcessingUtils.SearchResult;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
