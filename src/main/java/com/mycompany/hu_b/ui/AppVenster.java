@@ -11,6 +11,9 @@ public class AppVenster extends JFrame {
     private BerichtenTonen berichtenTonen;
     private InputPanel inputPanel;
     private ChatController controller;
+     private static final String PERSONEELSGIDS_VERSIE =
+            "Personeelsgids BU Talentclass versie 2024.1 en gelinkte bronnen"
+            + "Disclaimer: De informatie die HU-B geeft is mogelijk niet volledig of niet actueel. De informatie die gegeven is, is niet juridisch bindend. Raadpleeg bij twijfel altijd HR.";
 
     // Initialiseert het hoofdvenster van de chatbot.
     // Bouwt de UI, koppelt de controller en start het laden van de kennisbron (.pdf)
@@ -31,6 +34,7 @@ public class AppVenster extends JFrame {
 
         // Toont eerste berichten bij opstarten
         addAssistantBubble("Welkom! Ik ben HU-B, jouw HR-assistent.");
+        addAssistantBubble("Gebruikte bron: " + PERSONEELSGIDS_VERSIE);
         addAssistantBubble("Ik laad nu de personeelsgids. Een moment geduld...");
         
         // Start laden van de kennisbron (PDF)
