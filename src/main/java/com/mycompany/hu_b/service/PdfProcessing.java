@@ -51,7 +51,7 @@ public class PdfProcessing {
     private static final double MIN_SIMILARITY = 0.15;
     private static final int MAX_RESULTS = 6;
     private static final int MIN_GUIDE_RESULTS = 1;
-    private static final double GUIDE_WEIGHT = 1.1;
+    private static final double GUIDE_WEIGHT = 1.02;
     private static final double EXTERNAL_WEIGHT = 1.0;
     private static final double MAX_DUPLICATE_SIMILARITY = 0.97;
     private final OpenAI openAIService;
