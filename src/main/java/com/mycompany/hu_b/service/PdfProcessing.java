@@ -47,15 +47,15 @@ public class PdfProcessing {
 // Lijst met alle chunks uit de gids, inclusief embedding, pagina en functiescope
     private final List<ChunkEmbedding> chunks = new ArrayList<>();
     private static final Pattern WORD_FILE_PATTERN = Pattern.compile("(?i)([\\w\\-() ]+\\.docx?|[\\w\\-() ]+\\.doc)");
-    private static final double GUIDE_THRESHOLD = 0.65;
-    private static final double MIN_SIMILARITY = 0.15;
-    private static final int MAX_RESULTS = 6;
-    private static final int MIN_GUIDE_RESULTS = 1;
-    private static final double GUIDE_WEIGHT = 1.02;
-    private static final double EXTERNAL_WEIGHT = 1.0;
-    private static final double MAX_DUPLICATE_SIMILARITY = 0.97;
+    private static final double GUIDE_THRESHOLD = 0.65;             //bepaald wanneer personeelsgids genoeg is en wanneer extra info benodigd is uit externe bron. (guide score > guide threshhold = pg is genoeg)
+    private static final double MIN_SIMILARITY = 0.15;              //alles wat minder dan x similar is (embedding en woord overlap) word weggegooid. lager = meer ruis, hoger = minder resultaten
+    private static final int MAX_RESULTS = 6;                       //max aantal chunks dat je teruggeeft. laag = weinig contecxt, hoog = meer kans op mix van bronnen
+    private static final int MIN_GUIDE_RESULTS = 1;                 //neemt minimaal x personeelsgids chunks mee
+    private static final double GUIDE_WEIGHT = 1.1;                //boost de personeelsgids chunk (deze moet dus iets hoger staan)
+    private static final double EXTERNAL_WEIGHT = 1.0;              //boost de externe bron chumk
+    private static final double MAX_DUPLICATE_SIMILARITY = 0.97;    //voorkomt dubbele info. te hoog zorgt ervoor dat je altijd maar 1 bron krijgt.
     private final OpenAI openAIService;
-
+   
     public PdfProcessing(OpenAI openAIService) {
         this.openAIService = openAIService;
     }
@@ -688,8 +688,8 @@ public class PdfProcessing {
 
             double semanticScore = cosine(c.getEmbedding(), qVec);
             double lexicalScore = lexicalSimilarity(retrievalQuery, c.getText());
-            double baseScore = (semanticScore * 0.80) + (lexicalScore * 0.20);
-            double weightedScore = baseScore * (c.isPrimaryGuide() ? GUIDE_WEIGHT : EXTERNAL_WEIGHT);
+            double baseScore = (semanticScore * 0.80) + (lexicalScore * 0.20);                          //hoe goed matcht een chunk inhoudelijk met de vraag (lexical = exact woord, semantic =betekenis)
+            double weightedScore = baseScore * (c.isPrimaryGuide() ? GUIDE_WEIGHT : EXTERNAL_WEIGHT);   //
             scoredChunks.add(new ScoredChunk(c, baseScore, weightedScore));
         }
 // Sorteer van hoogste naar laagste score
@@ -737,8 +737,8 @@ public class PdfProcessing {
             if (!scoredCandidate.getChunk().isPrimaryGuide()) {
                 continue;
             }
-
-            if (scoredCandidate.getWeightedScore() < MIN_SIMILARITY) {
+            
+            if (scoredCandidate.getBaseScore() < MIN_SIMILARITY){      
                 continue;
             }
 
@@ -756,7 +756,7 @@ public class PdfProcessing {
                 continue;
             }
 
-            if (scoredCandidate.getWeightedScore() < MIN_SIMILARITY) {
+            if (scoredCandidate.getBaseScore() < MIN_SIMILARITY) {
                 continue;
             }
 
