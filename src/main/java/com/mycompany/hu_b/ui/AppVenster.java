@@ -8,9 +8,12 @@ import java.awt.*;
 //Dit is de 'regiseur' van de hele User Interface.
 public class AppVenster extends JFrame {
 
+    private static final int DEFAULT_REMEMBERED_MESSAGE_LIMIT = 20;
+
     private BerichtenTonen berichtenTonen;
     private InputPanel inputPanel;
     private ChatController controller;
+    private int rememberedMessageLimit = DEFAULT_REMEMBERED_MESSAGE_LIMIT;
      private static final String PERSONEELSGIDS_VERSIE =
             "Personeelsgids BU Talentclass versie 2024.1 en gelinkte bronnen"
             + "Disclaimer: De informatie die HU-B geeft is mogelijk niet volledig of niet actueel. De informatie die gegeven is, is niet juridisch bindend. Raadpleeg bij twijfel altijd HR.";
@@ -33,9 +36,9 @@ public class AppVenster extends JFrame {
         setVisible(true);
 
         // Toont eerste berichten bij opstarten
-        addAssistantBubble("Welkom! Ik ben HU-B, jouw HR-assistent.");
-        addAssistantBubble("Gebruikte bron: " + PERSONEELSGIDS_VERSIE);
-        addAssistantBubble("Ik laad nu de personeelsgids. Een moment geduld...");
+        addAssistantBubble("Welkom! Ik ben HU-B, jouw HR-assistent.", false);
+        addAssistantBubble("Gebruikte bron: " + PERSONEELSGIDS_VERSIE, false);
+        addAssistantBubble("Ik laad nu de personeelsgids. Een moment geduld...", false);
         
         // Start laden van de kennisbron (PDF)
         controller.startKnowledgeLoading();
@@ -57,13 +60,21 @@ public class AppVenster extends JFrame {
     // Toont een bericht van de gebruiker in het chatvenster.
     // Wordt aangeroepen door de controller wanneer de gebruiker een vraag stelt.
     public void addUserBubble(String text) {
-        berichtenTonen.addBubble(text, true);
+        addUserBubble(text, true);
+    }
+
+    public void addUserBubble(String text, boolean conversational) {
+        berichtenTonen.addBubble(text, true, conversational, rememberedMessageLimit);
     }
 
     // Toont een antwoord van de chatbot in het chatvenster.
     // Wordt aangeroepen door de controller na het genereren van een antwoord.
     public void addAssistantBubble(String text) {
-        berichtenTonen.addBubble(text, false);
+        addAssistantBubble(text, true);
+    }
+
+    public void addAssistantBubble(String text, boolean conversational) {
+        berichtenTonen.addBubble(text, false, conversational, rememberedMessageLimit);
     }
 
     // Stuurt een bericht naar 'inputPanel' om de verzendknop aan of uit te zetten.
@@ -75,5 +86,9 @@ public class AppVenster extends JFrame {
     //Stuurt een bericht naar 'inputPanel' om het invoerveld leeg te maken.
     public void clearInput() {
         inputPanel.clearInput();
+    }
+
+    public void setRememberedMessageLimit(int rememberedMessageLimit) {
+        this.rememberedMessageLimit = Math.max(0, rememberedMessageLimit);
     }
 }

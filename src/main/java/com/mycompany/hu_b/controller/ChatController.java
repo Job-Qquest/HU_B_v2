@@ -38,6 +38,7 @@ public class ChatController {
         this.knowledgeService = new PdfProcessing(openAIService);
         this.answerService = new ChatbotAntwoord(knowledgeService, openAIService);
         this.webPageArchiveService = new WebPageArchiveService();
+        this.view.setRememberedMessageLimit(answerService.getMaxHistoryMessages());
     }
 
 // Methode die wordt aangeroepen wanneer gebruiker een vraag stelt
@@ -47,12 +48,12 @@ public class ChatController {
         }
 
         if (!knowledgeReady) {
-            view.addAssistantBubble("De gids is nog niet klaar met laden. Probeer het zo opnieuw.");
+            view.addAssistantBubble("De gids is nog niet klaar met laden. Probeer het zo opnieuw.", false);
             return;
         }
 
 // Toon de vraag van de gebruiker in de UI en maak het invoerveld leeg
-        view.addUserBubble(question);
+        view.addUserBubble(question, true);
         view.clearInput();
 
 // Start een nieuwe thread zodat de UI niet vastloopt tijdens API-calls        
@@ -68,7 +69,7 @@ public class ChatController {
 
 // Zet het antwoord terug in de UI
                 SwingUtilities.invokeLater(()
-                        -> view.addAssistantBubble(finalAnswer));
+                        -> view.addAssistantBubble(finalAnswer, true));
 
             } catch (Exception ex) {
                 ex.printStackTrace();
@@ -83,7 +84,7 @@ public class ChatController {
 
                 String finalMsg = msg;
                 SwingUtilities.invokeLater(() -> {
-                    view.addAssistantBubble("Er ging iets mis: " + finalMsg);
+                    view.addAssistantBubble("Er ging iets mis: " + finalMsg, false);
                 });
             }
         }).start();
@@ -168,15 +169,15 @@ public class ChatController {
 
                 SwingUtilities.invokeLater(() -> {
                     view.setSendEnabled(true);
-                    view.addAssistantBubble("De personeelsgids is geladen. Je kunt nu vragen stellen.");
+                    view.addAssistantBubble("De personeelsgids is geladen. Je kunt nu vragen stellen.", false);
                 });
 
             } catch (Exception ex) {
                 ex.printStackTrace();
 
                 SwingUtilities.invokeLater(() -> {
-                    view.addAssistantBubble("Opstartfout: " + ex.getMessage());
-                    view.addAssistantBubble("Tip: controleer OPENAI_API_KEY en je internetverbinding.");
+                    view.addAssistantBubble("Opstartfout: " + ex.getMessage(), false);
+                    view.addAssistantBubble("Tip: controleer OPENAI_API_KEY en je internetverbinding.", false);
                 });
             }
         }).start();

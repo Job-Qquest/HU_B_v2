@@ -8,6 +8,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.json.JSONObject;
 
 // Deze class is verantwoordelijk voor:
 //  Het bouwen van de context (tekst uit PDF chunks)
@@ -143,7 +144,7 @@ public class ChatbotPrompt {
 
 // Bouwt de volledige system prompt voor OpenAI
 // Dit bepaalt hoe het model moet denken en antwoorden
-    public String buildSystemPrompt(String question, String contextString) {
+    public String buildSystemPrompt(String question, String contextString, String conversationHistoryText) {
 
         String systemPrompt =
 
@@ -156,6 +157,9 @@ public class ChatbotPrompt {
 "# CONSTRAINTS (STRIKTE REGELS) " +
 "1. Source Grounding: Gebruik ALLEEN de informatie tussen de <context> tags. " +
 "Als het antwoord daar niet staat geef je aan wat je niet kan vinden." +
+
+"1b. Gespreksgeheugen: Gebruik de gesprekshistorie alleen om te begrijpen waar een vervolgvraag of verwijswoord naar verwijst. " +
+"Gebruik de gesprekshistorie nooit als feitelijke bron; feitelijke claims moeten altijd uit de <context> komen. " +
 
 "2. Scope: Behandel de vraag alleen binnen de HR-context van de personeelsgids."+
 "Als de vraag een specifieke doelgroep/functie noemt (zoals Talentclass of TC consultant), gebruik dan alleen context waarin die doelgroep/functie expliciet voorkomt, behalve bij referral/voordracht-vragen waar een algemene referralregeling van toepassing kan zijn. " +
@@ -188,6 +192,10 @@ public class ChatbotPrompt {
 
 "BronID: [Noem alleen BRON-nummers, bijv. 2 of 2,5. Indien niet gevonden: N.v.t.] " +
 
+"<gesprekshistorie> " +
+"{{gesprekshistorie}} " +
+"</gesprekshistorie> " +
+
 "<context> " +
 "{{hier de tekst uit de personeelsgids}} " +
 "</context> " +
@@ -197,8 +205,47 @@ public class ChatbotPrompt {
 "</vraag_gebruiker>";
 
         return systemPrompt
+                .replace("{{gesprekshistorie}}", conversationHistoryText == null ? "Geen relevante gesprekshistorie." : conversationHistoryText)
                 .replace("{{hier de tekst uit de personeelsgids}}", contextString)
                 .replace("{{vraag}}", question);
+    }
+
+    // Bouwt een compacte tekstweergave van recente vraag-antwoordparen.
+    // Deze historie helpt het model bij vervolgvragen, maar geldt niet als feitelijke bron.
+    public String buildConversationHistoryText(List<JSONObject> conversationHistory) {
+        if (conversationHistory == null || conversationHistory.isEmpty()) {
+            return "Geen relevante gesprekshistorie.";
+        }
+
+        StringBuilder historyText = new StringBuilder();
+        int turnNumber = 1;
+
+        for (JSONObject message : conversationHistory) {
+            if (message == null) {
+                continue;
+            }
+
+            String role = message.optString("role", "").trim();
+            String content = message.optString("content", "").trim();
+            if (role.isEmpty() || content.isEmpty()) {
+                continue;
+            }
+
+            String roleLabel = "user".equalsIgnoreCase(role) ? "Gebruiker" : "Assistent";
+            historyText.append("Turn ").append(turnNumber)
+                    .append(" - ")
+                    .append(roleLabel)
+                    .append(": ")
+                    .append(content.replace("\n", " ").trim())
+                    .append("\n");
+            turnNumber++;
+        }
+
+        if (historyText.length() == 0) {
+            return "Geen relevante gesprekshistorie.";
+        }
+
+        return historyText.toString().trim();
     }
 
 // Speciale logica voor verzuimvragen (zonder OpenAI)
