@@ -5,6 +5,7 @@
 package com.mycompany.hu_b.controller;
 
 import com.mycompany.hu_b.service.ChatbotAntwoord;
+import com.mycompany.hu_b.service.KnowledgeChunkCache;
 import com.mycompany.hu_b.service.OpenAI;
 import com.mycompany.hu_b.service.PdfProcessing;
 import com.mycompany.hu_b.service.WebPageArchiveService;
@@ -28,6 +29,7 @@ public class ChatController {
     private final PdfProcessing knowledgeService;
     private final ChatbotAntwoord answerService;
     private final WebPageArchiveService webPageArchiveService;
+    private final KnowledgeChunkCache chunkCache;
 
     private volatile boolean knowledgeReady = false;
 
@@ -38,6 +40,7 @@ public class ChatController {
         this.knowledgeService = new PdfProcessing(openAIService);
         this.answerService = new ChatbotAntwoord(knowledgeService, openAIService);
         this.webPageArchiveService = new WebPageArchiveService();
+        this.chunkCache = new KnowledgeChunkCache();
     }
 
 // Methode die wordt aangeroepen wanneer gebruiker een vraag stelt
@@ -104,6 +107,7 @@ public class ChatController {
                     archiveDirectory = Path.of(".").toAbsolutePath().normalize();
                 }
                 String archiveDirectories = archiveDirectory.toString();
+                Path cacheFile = chunkCache.resolveDefaultCachePath(guideFile);
                 
                 //Leest bestand lijstWebsites.txt en maakt een lijst met websitelinks
                 //die wordt gebruikt om te scrapen
@@ -124,51 +128,80 @@ public class ChatController {
                     System.out.println("lijstWebsites.txt niet gevonden op " + websitesList);
                 }
 
-                List<Path> webArchiveFiles = webPageArchiveService.archivePages(websiteLinks, archiveDirectory);
-                
-                
                 //Maakt een lijst met alle word en pdf bestanden in de map waar 
                 //de personeelsgids in staat
+                List<String> supplementarySources = new ArrayList<>();
                 File directory = new File(archiveDirectories);
                 File[] files = directory.listFiles();
-                List<String> supplementarySources = new ArrayList<>();
-
                 if (files != null) {
                     for (File file : files) {
+                        if (file == null || file.isDirectory()) {
+                            continue;
+                        }
+
                         String name = file.getName();
                         if (name == null) {
                             continue;
                         }
 
                         String lowerName = name.toLowerCase(Locale.ROOT);
+                        String guideName = guideFile.getFileName() == null
+                                ? ""
+                                : guideFile.getFileName().toString().toLowerCase(Locale.ROOT);
+                        String cacheName = cacheFile.getFileName() == null
+                                ? ""
+                                : cacheFile.getFileName().toString().toLowerCase(Locale.ROOT);
+
+                        if (lowerName.equals(guideName) || lowerName.equals(cacheName)) {
+                            continue;
+                        }
+
                         if (lowerName.endsWith(".pdf")
                                 || lowerName.endsWith(".doc")
                                 || lowerName.endsWith(".docx")) {
-                            supplementarySources.add(lowerName);
+                            supplementarySources.add(file.toPath().toAbsolutePath().normalize().toString());
                         }
                     }
                 }
-                //// Laad de personeelsgids en maak embeddings.
-//// De extra documenten komen uit de PDF en de webpagina's worden eerst lokaal als JSON opgeslagen.
-//                List<String> supplementarySources = new ArrayList<>(List.of(
-//                        "Adviezen m.b.t. gezond in een auto rijden.docx",
-//                        "Gezond beeldschermwerk.docx",
-//                        "Pensioenreglement ZwitserLeven 1-1-2018.pdf",
-//                        "Pensioenreglement ZwitserLeven Bijlagen 1-1-2018.pdf",
-//                        "PG4 - Vergoedingen.pdf",
-//                        "Psychosociale arbeidsbelasting.docx",
-//                        "Werkwijzer-Poortwachter.pdf"
-//                ));
+
+                List<Path> sourceFiles = new ArrayList<>();
+                sourceFiles.add(guideFile);
+                if (Files.exists(websitesList)) {
+                    sourceFiles.add(websitesList);
+                }
+                for (String source : supplementarySources) {
+                    sourceFiles.add(Path.of(source));
+                }
+
+                if (chunkCache.isCacheValid(cacheFile, sourceFiles)) {
+                    try {
+                        knowledgeService.replaceChunks(chunkCache.loadChunks(cacheFile));
+                        knowledgeReady = true;
+
+                        SwingUtilities.invokeLater(() -> {
+                            view.setSendEnabled(true);
+                            view.addAssistantBubble("De kennisbron is geladen uit de cache. Je kunt nu vragen stellen.");
+                        });
+                        return;
+                    } catch (Exception cacheEx) {
+                        System.out.println("Cache kon niet worden geladen, opnieuw opbouwen: " + cacheEx.getMessage());
+                    }
+                }
+
+                List<Path> webArchiveFiles = webPageArchiveService.archivePages(websiteLinks, archiveDirectory);
                 for (Path webArchiveFile : webArchiveFiles) {
-                    supplementarySources.add(webArchiveFile.toString());
+                    if (webArchiveFile != null) {
+                        supplementarySources.add(webArchiveFile.toString());
+                    }
                 }
 
                 knowledgeService.loadGuide(resolveGuidePath(), supplementarySources);
+                chunkCache.saveChunks(cacheFile, knowledgeService.getChunks(), sourceFiles);
                 knowledgeReady = true;
 
                 SwingUtilities.invokeLater(() -> {
                     view.setSendEnabled(true);
-                    view.addAssistantBubble("De personeelsgids is geladen. Je kunt nu vragen stellen.");
+                    view.addAssistantBubble("De kennisbron is opgebouwd en opgeslagen in de cache. Je kunt nu vragen stellen.");
                 });
 
             } catch (Exception ex) {
