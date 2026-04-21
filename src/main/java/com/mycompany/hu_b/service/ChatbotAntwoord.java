@@ -20,7 +20,7 @@ public class ChatbotAntwoord {
 
     private static final int MAX_HISTORY_MESSAGES = 20;
     private static final int MAX_HISTORY_FOR_PROMPT = 20;
-    private static final int MAX_PREVIOUS_USER_QUESTIONS = 4;
+    private static final int MAX_PREVIOUS_USER_QUESTIONS = 3;
     private static final int SHORT_FOLLOW_UP_WORD_LIMIT = 8;
     private static final Pattern CONTEXT_DEPENDENT_PATTERN = Pattern.compile(
             "\\b(dat|dit|deze|die|daar|daarover|daarvan|ervoor|daarvoor|het|ze|zelfde|vorige|eerder)\\b",
@@ -246,5 +246,9 @@ public class ChatbotAntwoord {
                 || normalized.contains("bonus")
                 || normalized.contains("declaratie")
                 || normalized.contains("inhouding");
+    }
+
+    public int getMaxHistoryMessages() {
+        return MAX_HISTORY_MESSAGES;
     }
 }

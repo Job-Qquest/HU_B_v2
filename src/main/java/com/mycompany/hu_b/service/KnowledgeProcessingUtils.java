@@ -33,6 +33,19 @@ public abstract class KnowledgeProcessingUtils {
         return chunks;
     }
 
+    // Vervangt alle geladen chunks in één keer.
+    public void replaceChunks(List<ChunkEmbedding> newChunks) {
+        chunks.clear();
+        if (newChunks != null && !newChunks.isEmpty()) {
+            chunks.addAll(newChunks);
+        }
+    }
+
+    // Leegt alle geladen chunks.
+    public void clearChunks() {
+        chunks.clear();
+    }
+
     // Zet een bestandspad om naar een nette titel voor bronvermelding.
     // We gebruiken de bestandsnaam zonder extensie zodat Word-bronnen geen paginanummer nodig hebben.
     protected String buildSourceLabel(Path path) {

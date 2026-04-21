@@ -3,13 +3,20 @@ package com.mycompany.hu_b.ui;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
 
 //Deze klasse is verantwoordelijk voor het bouwen van het bovenste gedeelte
 //van de user interface. Alle chatbubbels.
 public class BerichtenTonen {
 
+    private static final Color USER_BUBBLE_COLOR = new Color(55, 192, 241);
+    private static final Color ASSISTANT_BUBBLE_COLOR = new Color(255, 255, 255, 235);
+    private static final Color REMEMBERED_BUBBLE_COLOR = new Color(0xFF3200);
+
     private JPanel chatPanel;
     private JScrollPane scrollPane;
+    private final List<MessageBubble> bubbles = new ArrayList<>();
 
     // Initialiseert het onderdeel dat alle chatberichten toont.
     // Roept direct de setup van het chatgedeelte aan.
@@ -37,7 +44,7 @@ public class BerichtenTonen {
     // Voegt één chatbericht toe aan het scherm als bubble van gebruiker of assistent.
     // Verwerkt ook een eventuele disclaimer apart in de opmaak.
     // Wordt aangeroepen vanuit AppVenster om berichten zichtbaar te maken in de UI.
-    public void addBubble(String text, boolean user) {
+    public void addBubble(String text, boolean user, boolean conversational, int rememberedMessageLimit) {
         JPanel row = new JPanel(new BorderLayout());
         row.setOpaque(false);
 
@@ -81,10 +88,10 @@ public class BerichtenTonen {
         bubble.setSize(new Dimension(700, Short.MAX_VALUE));
 
         if (user) {
-            bubble.setBackground(new Color(55, 192, 241));
+            bubble.setBackground(USER_BUBBLE_COLOR);
             bubble.setForeground(Color.WHITE);
         } else {
-            bubble.setBackground(new Color(255, 255, 255, 235));
+            bubble.setBackground(ASSISTANT_BUBBLE_COLOR);
             bubble.setForeground(Color.BLACK);
         }
 
@@ -97,6 +104,8 @@ public class BerichtenTonen {
 
         row.add(container, BorderLayout.CENTER);
         chatPanel.add(row);
+        bubbles.add(new MessageBubble(bubble, user, conversational));
+        updateRememberedHighlights(rememberedMessageLimit);
         chatPanel.revalidate();
         chatPanel.repaint();
 
@@ -106,8 +115,40 @@ public class BerichtenTonen {
         });
     }
 
+    private void updateRememberedHighlights(int rememberedMessageLimit) {
+        int conversationalCount = 0;
+        for (MessageBubble bubble : bubbles) {
+            if (bubble.conversational()) {
+                conversationalCount++;
+            }
+        }
+
+        int rememberedStartIndex = Math.max(0, conversationalCount - Math.max(0, rememberedMessageLimit));
+        int conversationalIndex = 0;
+
+        for (MessageBubble bubble : bubbles) {
+            if (!bubble.conversational()) {
+                bubble.component().setBackground(baseColorFor(bubble.user()));
+                continue;
+            }
+
+            boolean remembered = conversationalIndex >= rememberedStartIndex;
+            bubble.component().setBackground(remembered
+                    ? REMEMBERED_BUBBLE_COLOR
+                    : baseColorFor(bubble.user()));
+            conversationalIndex++;
+        }
+    }
+
+    private Color baseColorFor(boolean user) {
+        return user ? USER_BUBBLE_COLOR : ASSISTANT_BUBBLE_COLOR;
+    }
+
     // Geeft de scrollbare container van het chatgedeelte terug.
     public JScrollPane getScrollPane() {
         return scrollPane;
+    }
+
+    private record MessageBubble(JTextPane component, boolean user, boolean conversational) {
     }
 }
