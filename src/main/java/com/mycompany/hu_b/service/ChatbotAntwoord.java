@@ -5,8 +5,10 @@ import com.mycompany.hu_b.service.KnowledgeProcessingUtils.SearchResult;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 // Bouwt het uiteindelijke chatbotantwoord op...
 // De class haalt relevante chunks op uit PdfProcessing,
@@ -15,6 +17,14 @@ import java.util.Optional;
 // en verfijnt het antwoord inclusief bronvermelding en paginareferenties.
 
 public class ChatbotAntwoord {
+
+    private static final int MAX_HISTORY_MESSAGES = 20;
+    private static final int MAX_HISTORY_FOR_PROMPT = 20;
+    private static final int MAX_PREVIOUS_USER_QUESTIONS = 4;
+    private static final int SHORT_FOLLOW_UP_WORD_LIMIT = 8;
+    private static final Pattern CONTEXT_DEPENDENT_PATTERN = Pattern.compile(
+            "\\b(dat|dit|deze|die|daar|daarover|daarvan|ervoor|daarvoor|het|ze|zelfde|vorige|eerder)\\b",
+            Pattern.CASE_INSENSITIVE);
 
     private final List<org.json.JSONObject> conversationHistory = new ArrayList<>();
 // Bewaart de recente conversatiegeschiedenis als JSON-objecten
@@ -37,7 +47,8 @@ public class ChatbotAntwoord {
     public String ask(String question) throws Exception {
 
 // Zoekt de meest relevante chunks in één globale, gewogen ranglijst
-        SearchResult searchResult = knowledgeService.search(question);
+        String contextualQuestion = buildQuestionWithMemory(question);
+        SearchResult searchResult = knowledgeService.search(contextualQuestion);
         List<ChunkEmbedding> rankedChunks = searchResult.getRankedChunks();
 
 // Plus een map om chunks later terug te kunnen koppelen aan Bron-ID's
@@ -45,6 +56,8 @@ public class ChatbotAntwoord {
 
 // Bouwt een context string (tekst die naar OpenAI gaat)
         String contextString = promptBuilder.buildContextText(rankedChunks, sourceById);
+        String conversationHistoryText =
+                promptBuilder.buildConversationHistoryText(getRecentConversationHistory(MAX_HISTORY_FOR_PROMPT));
 
 // Als het een vraag is over verzuim -> direct antwoord zonder OpenAI
         Optional<String> verzuimDurationAnswer =
@@ -56,10 +69,10 @@ public class ChatbotAntwoord {
 
 // Bouwt de uiteindelijk system prompt voor OpenAI
         String finalSystemPrompt =
-                promptBuilder.buildSystemPrompt(question, contextString);
+                promptBuilder.buildSystemPrompt(question, contextString, conversationHistoryText);
 
 // Logt de chunks die daadwerkelijk in de laatste LLM-stap mee worden gestuurd
-        logChunksForFinalPrompt(question, sourceById, contextString);
+        logChunksForFinalPrompt(contextualQuestion, sourceById, contextString);
 
 // Vraagt OpenAI om een antwoord te genereren
         String answer = openAIService.chat(finalSystemPrompt);
@@ -73,11 +86,90 @@ public class ChatbotAntwoord {
         conversationHistory.add(new org.json.JSONObject().put("role", "assistant").put("content", normalizedAnswer));
 
 // Houd maximaal 12 berichten
-        if (conversationHistory.size() > 12)
-            conversationHistory.subList(0, conversationHistory.size() - 12).clear();
+        if (conversationHistory.size() > MAX_HISTORY_MESSAGES)
+            conversationHistory.subList(0, conversationHistory.size() - MAX_HISTORY_MESSAGES).clear();
 
 // Geeft het uiteindelijke antwoord terug
         return normalizedAnswer;
+    }
+
+    // Verrijkt een korte of verwijzende vervolgvraag met recente gebruikersvragen,
+    // zodat retrieval ook zonder expliciete herhaling genoeg context heeft.
+    private String buildQuestionWithMemory(String question) {
+        if (question == null || question.isBlank() || !isContextDependentQuestion(question)) {
+            return question;
+        }
+
+        List<String> recentQuestions = getRecentUserQuestions(MAX_PREVIOUS_USER_QUESTIONS);
+        if (recentQuestions.isEmpty()) {
+            return question;
+        }
+
+        StringBuilder contextualQuestion = new StringBuilder();
+        contextualQuestion.append("Eerdere relevante vragen:\n");
+        for (String previousQuestion : recentQuestions) {
+            contextualQuestion.append("- ").append(previousQuestion).append("\n");
+        }
+        contextualQuestion.append("Huidige vervolgvraag:\n").append(question.trim());
+        return contextualQuestion.toString();
+    }
+
+    private boolean isContextDependentQuestion(String question) {
+        if (question == null || question.isBlank()) {
+            return false;
+        }
+
+        String normalized = question.trim().toLowerCase(Locale.ROOT);
+        if (CONTEXT_DEPENDENT_PATTERN.matcher(normalized).find()) {
+            return true;
+        }
+
+        String[] words = normalized.split("\\s+");
+        if (words.length > SHORT_FOLLOW_UP_WORD_LIMIT) {
+            return false;
+        }
+
+        return normalized.startsWith("en ")
+                || normalized.startsWith("maar ")
+                || normalized.startsWith("hoe ")
+                || normalized.startsWith("wat ")
+                || normalized.startsWith("geldt ")
+                || normalized.startsWith("kan ")
+                || normalized.startsWith("kun ")
+                || normalized.startsWith("is ")
+                || normalized.startsWith("zijn ")
+                || normalized.startsWith("wanneer ")
+                || normalized.startsWith("welke ");
+    }
+
+    private List<org.json.JSONObject> getRecentConversationHistory(int maxMessages) {
+        if (conversationHistory.isEmpty() || maxMessages <= 0) {
+            return List.of();
+        }
+
+        int start = Math.max(0, conversationHistory.size() - maxMessages);
+        return new ArrayList<>(conversationHistory.subList(start, conversationHistory.size()));
+    }
+
+    private List<String> getRecentUserQuestions(int maxQuestions) {
+        List<String> questions = new ArrayList<>();
+        if (maxQuestions <= 0) {
+            return questions;
+        }
+
+        for (int i = conversationHistory.size() - 1; i >= 0 && questions.size() < maxQuestions; i--) {
+            org.json.JSONObject message = conversationHistory.get(i);
+            if (message == null || !"user".equalsIgnoreCase(message.optString("role"))) {
+                continue;
+            }
+
+            String content = message.optString("content", "").trim();
+            if (!content.isEmpty()) {
+                questions.add(0, content);
+            }
+        }
+
+        return questions;
     }
 
 // Geeft zichtbaar weer welke chunks in de laatste prompt zitten
