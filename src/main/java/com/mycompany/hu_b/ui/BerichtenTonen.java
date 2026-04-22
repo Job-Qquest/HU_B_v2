@@ -12,9 +12,12 @@ import java.util.List;
 //van de user interface. Alle chatbubbels.
 public class BerichtenTonen {
 
-    private static final Color USER_BUBBLE_COLOR = new Color(55, 192, 241);
-    private static final Color ASSISTANT_BUBBLE_COLOR = new Color(255, 255, 255, 235);
-    private static final Color REMEMBERED_BUBBLE_COLOR = new Color(0xFF3200);
+    private static final Color USER_BUBBLE_COLOR = new Color(0x37C1F1);
+    private static final Color ASSISTANT_BUBBLE_COLOR = new Color(0xFF3200);
+    private static final Color OUT_OF_MEMORY_BUBBLE_COLOR = new Color(0x091E38);
+    private static final Color DARK_NAVY = new Color(0x091E38);
+    private static final Color WHITE = Color.WHITE;
+    private static final Color BLACK = Color.BLACK;
 
     private JPanel chatPanel;
     private JScrollPane scrollPane;
@@ -32,13 +35,16 @@ public class BerichtenTonen {
     private void setup() {
         chatPanel = new JPanel();
         chatPanel.setLayout(new BoxLayout(chatPanel, BoxLayout.Y_AXIS));
-        chatPanel.setOpaque(false);
+        chatPanel.setOpaque(true);
+        chatPanel.setBackground(DARK_NAVY);
         chatPanel.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
 
         scrollPane = new JScrollPane(chatPanel);
         scrollPane.setBorder(null);
-        scrollPane.getViewport().setOpaque(false);
-        scrollPane.setOpaque(false);
+        scrollPane.getViewport().setOpaque(true);
+        scrollPane.getViewport().setBackground(DARK_NAVY);
+        scrollPane.setOpaque(true);
+        scrollPane.setBackground(DARK_NAVY);
         scrollPane.getVerticalScrollBar().setUnitIncrement(20);
         scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
     }
@@ -64,17 +70,17 @@ public class BerichtenTonen {
         if (!user && !disclaimer.isEmpty()) {
             htmlText =
                 "<html>" +
-                "<div style='font-family:Segoe UI; font-size:13px; width:650px'>" +
+                "<div style='font-family:Arial,sans-serif; font-size:13px; font-weight:bold; width:650px'>" +
                 antwoord.replace("\n", "<br>") +
                 "</div>" +
-                "<div style='margin-top:20px; font-size:10px; color:gray; text-align:left;'>" +
+                "<div style='margin-top:20px; font-family:Arial,sans-serif; font-size:10px; color:#D9E2F2; text-align:left;'>" +
                 disclaimer.replace("\n", "<br>") +
                 "</div>" +
                 "</html>";
         } else {
             htmlText =
                 "<html>" +
-                "<div style='font-family:Segoe UI; font-size:13px; width:650px'>" +
+                "<div style='font-family:Arial,sans-serif; font-size:13px; font-weight:bold; width:650px'>" +
                 text.replace("\n", "<br>") +
                 "</div>" +
                 "</html>";
@@ -91,10 +97,10 @@ public class BerichtenTonen {
 
         if (user) {
             bubble.setBackground(USER_BUBBLE_COLOR);
-            bubble.setForeground(Color.WHITE);
+            bubble.setForeground(DARK_NAVY);
         } else {
             bubble.setBackground(ASSISTANT_BUBBLE_COLOR);
-            bubble.setForeground(Color.BLACK);
+            bubble.setForeground(WHITE);
         }
 
         bubble.setOpaque(true);
@@ -144,14 +150,12 @@ public class BerichtenTonen {
 
         for (MessageBubble bubble : bubbles) {
             if (!bubble.conversational()) {
-                bubble.component().setBackground(baseColorFor(bubble.user()));
+                applyBubbleColors(bubble, true);
                 continue;
             }
 
             boolean remembered = conversationalIndex >= rememberedStartIndex;
-            bubble.component().setBackground(remembered
-                    ? REMEMBERED_BUBBLE_COLOR
-                    : baseColorFor(bubble.user()));
+            applyBubbleColors(bubble, remembered);
             conversationalIndex++;
         }
     }
@@ -160,6 +164,16 @@ public class BerichtenTonen {
         return user ? USER_BUBBLE_COLOR : ASSISTANT_BUBBLE_COLOR;
     }
 
+    private void applyBubbleColors(MessageBubble bubble, boolean remembered) {
+        JTextPane component = bubble.component();
+        if (remembered) {
+            component.setBackground(baseColorFor(bubble.user()));
+            component.setForeground(bubble.user() ? DARK_NAVY : WHITE);
+            return;
+        }
+
+        component.setBackground(OUT_OF_MEMORY_BUBBLE_COLOR);
+        component.setForeground(WHITE);
     private void openLink(URI uri) {
         if (uri == null) {
             return;
