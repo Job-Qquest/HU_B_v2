@@ -35,6 +35,7 @@ public final class WordProcessing {
                         sourceLabel,
                         null,
                         null,
+                        guidePath.toAbsolutePath().normalize().toString(),
                         false,
                         false));
             }

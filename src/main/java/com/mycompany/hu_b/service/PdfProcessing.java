@@ -84,6 +84,7 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
                             sourceLabel,
                             null,
                             null,
+                            pdfFile.toString(),
                             true,
                             true));
                 }
@@ -145,6 +146,7 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
                             sourceLabel,
                             null,
                             null,
+                            pdfPath.toString(),
                             true,
                             false));
                 }

@@ -86,6 +86,7 @@ public final class WebPageProcessing {
                     sourceLabel,
                     sourceUrl,
                     sourceName,
+                    jsonPath.toAbsolutePath().normalize().toString(),
                     false,
                     false));
         }

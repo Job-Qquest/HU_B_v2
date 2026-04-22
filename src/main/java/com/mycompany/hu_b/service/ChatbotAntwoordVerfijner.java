@@ -8,6 +8,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.net.URI;
 
 public class ChatbotAntwoordVerfijner {
 
@@ -99,6 +102,7 @@ public class ChatbotAntwoordVerfijner {
         String label = chunk.getSourceLabel();
         String sourceName = chunk.getSourceName();
         String sourceUrl = chunk.getSourceUrl();
+        String sourcePath = chunk.getSourcePath();
         int page = chunk.getPage();
         String pageText = page > 0 ? "pagina " + page : null;
 
@@ -106,28 +110,65 @@ public class ChatbotAntwoordVerfijner {
             String displayLabel = label != null && !label.isBlank()
                     ? label
                     : (sourceName != null && !sourceName.isBlank() ? sourceName : "webpagina");
-            List<String> parts = new ArrayList<>();
-            if (sourceName != null && !sourceName.isBlank()) {
-                parts.add("bron: " + sourceName);
+            String linkTarget = sourceUrl != null && !sourceUrl.isBlank()
+                    ? sourceUrl
+                    : toFileUri(sourcePath);
+            if (linkTarget != null && !linkTarget.isBlank()) {
+                return buildHtmlLink(displayLabel, linkTarget);
             }
-            if (sourceUrl != null && !sourceUrl.isBlank()) {
-                parts.add(sourceUrl);
-            }
-            return displayLabel + " (" + String.join(" | ", parts) + ")";
+            return displayLabel;
         }
 
         if (label != null && !label.isBlank()) {
             if (chunk.isSourcePdf() && pageText != null) {
-                return label + " (" + pageText + ")";
+                String linkTarget = toFileUri(sourcePath);
+                return linkTarget != null ? buildHtmlLink(label + " (" + pageText + ")", linkTarget) : label + " (" + pageText + ")";
+            }
+            if (sourcePath != null && !sourcePath.isBlank()) {
+                String linkTarget = toFileUri(sourcePath);
+                return linkTarget != null ? buildHtmlLink(label, linkTarget) : label;
             }
             return label;
         }
 
         if (chunk.isSourcePdf() && pageText != null) {
-            return pageText;
+            String linkTarget = toFileUri(sourcePath);
+            return linkTarget != null ? buildHtmlLink(pageText, linkTarget) : pageText;
+        }
+
+        if (sourcePath != null && !sourcePath.isBlank()) {
+            String linkTarget = toFileUri(sourcePath);
+            return linkTarget != null ? buildHtmlLink(page > 0 ? "PAGINA " + page : "bron", linkTarget) : (page > 0 ? "PAGINA " + page : "N.v.t.");
         }
 
         return page > 0 ? "PAGINA " + page : "N.v.t.";
+    }
+
+    private String buildHtmlLink(String label, String href) {
+        return "<a href=\"" + escapeHtml(href) + "\">" + escapeHtml(label) + "</a>";
+    }
+
+    private String toFileUri(String sourcePath) {
+        if (sourcePath == null || sourcePath.isBlank()) {
+            return null;
+        }
+
+        try {
+            return Path.of(sourcePath).toAbsolutePath().normalize().toUri().toString();
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    private String escapeHtml(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;");
     }
 
 // Bepaalt of een chunk relevant is voor het antwoord
