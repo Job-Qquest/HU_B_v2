@@ -4,6 +4,8 @@ import com.mycompany.hu_b.controller.ChatController;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 //Dit is de 'regiseur' van de hele User Interface.
 public class AppVenster extends JFrame {
@@ -24,9 +26,10 @@ public class AppVenster extends JFrame {
         setTitle("HU-B – HR Chatbot");
         setSize(1100, 700);
         setLocationRelativeTo(null);
-        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
 
         setupUI();
+        setupCloseConfirmation();
 
         controller = new ChatController(this);
 
@@ -42,6 +45,25 @@ public class AppVenster extends JFrame {
         
         // Start laden van de kennisbron (PDF)
         controller.startKnowledgeLoading();
+    }
+
+    private void setupCloseConfirmation() {
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                int choice = JOptionPane.showConfirmDialog(
+                        AppVenster.this,
+                        "Weet je zeker dat je de chatbot wilt sluiten?\n"
+                        + "Bij het afsluiten wordt de gespreksgeschiedenis gewist.",
+                        "Chatbot Afsluiten",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.WARNING_MESSAGE);
+
+                if (choice == JOptionPane.YES_OPTION) {
+                    dispose();
+                }
+            }
+        });
     }
 
     // Bouwt de layout van het scherm.
