@@ -2,20 +2,17 @@ package com.mycompany.hu_b.service;
 
 import com.mycompany.hu_b.model.ChunkEmbedding;
 import com.mycompany.hu_b.service.KnowledgeProcessingUtils.SearchResult;
-import com.mycompany.hu_b.util.FunctionProfile;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 // Bouwt het uiteindelijke chatbotantwoord op.
 // Deze variant gebruikt een kleine conversatiestatus zodat verduidelijkingsvragen
-// zoals functie-informatie niet verloren gaan tussen twee user messages.
+// niet verloren gaan tussen twee user messages.
 public class ChatbotAntwoord {
 
     private static final int MAX_HISTORY_MESSAGES = 20;
@@ -25,12 +22,8 @@ public class ChatbotAntwoord {
     private static final Pattern CONTEXT_DEPENDENT_PATTERN = Pattern.compile(
             "\\b(dat|dit|deze|die|daar|daarover|daarvan|ervoor|daarvoor|het|ze|zelfde|vorige|eerder)\\b",
             Pattern.CASE_INSENSITIVE);
-    private static final Pattern TOPICLESS_QUESTION_PATTERN = Pattern.compile(
-            "^(hoe zit het|hoe werkt dat|kan dat|mag dat|wat bedoel je|hoe dan)\\b",
-            Pattern.CASE_INSENSITIVE);
 
     private final List<org.json.JSONObject> conversationHistory = new ArrayList<>();
-    private final Set<String> knownUserFunctionLabels = new LinkedHashSet<>();
 
     private final PdfProcessing knowledgeService;
     private final OpenAI openAIService;
@@ -51,8 +44,6 @@ public class ChatbotAntwoord {
             return "Ik help je graag. Kun je je vraag iets concreter formuleren?";
         }
 
-        rememberFunctionFromText(question);
-
         PendingResolution pendingResolution = resolvePendingClarification(question);
         if (pendingResolution.immediateResponse() != null) {
             appendConversationTurn(question, pendingResolution.immediateResponse());
@@ -62,7 +53,7 @@ public class ChatbotAntwoord {
         String effectiveQuestion = pendingResolution.effectiveQuestion();
         String historyQuestion = pendingResolution.historyQuestion();
 
-        String contextualQuestion = buildQuestionWithMemory(effectiveQuestion, knownUserFunctionLabels);
+        String contextualQuestion = buildQuestionWithMemory(effectiveQuestion);
         SearchResult searchResult = knowledgeService.search(contextualQuestion);
         List<ChunkEmbedding> rankedChunks = searchResult.getRankedChunks();
 
@@ -80,13 +71,9 @@ public class ChatbotAntwoord {
             return answer;
         }
 
-        ClarificationRequest clarificationRequest =
-                determineClarificationRequest(effectiveQuestion, rankedChunks);
+        ClarificationRequest clarificationRequest = determineClarificationRequest(effectiveQuestion, rankedChunks);
         if (clarificationRequest != null) {
-            pendingClarification = new PendingClarification(
-                    clarificationRequest.type(),
-                    effectiveQuestion,
-                    clarificationRequest.message());
+            pendingClarification = new PendingClarification(effectiveQuestion, clarificationRequest.message());
             appendConversationTurn(historyQuestion, clarificationRequest.message());
             return clarificationRequest.message();
         }
@@ -107,7 +94,7 @@ public class ChatbotAntwoord {
 
     // Verrijkt een korte of verwijzende vervolgvraag met recente gebruikersvragen,
     // zodat retrieval ook zonder expliciete herhaling genoeg context heeft.
-    private String buildQuestionWithMemory(String question, Set<String> activeFunctionLabels) {
+    private String buildQuestionWithMemory(String question) {
         if (question == null || question.isBlank()) {
             return question;
         }
@@ -126,55 +113,18 @@ public class ChatbotAntwoord {
             }
         }
 
-        return appendKnownFunctionContext(enrichedQuestion, activeFunctionLabels);
+        return enrichedQuestion;
     }
 
     private ClarificationRequest determineClarificationRequest(String effectiveQuestion,
                                                                List<ChunkEmbedding> rankedChunks) {
-        if (needsFunctionClarification(effectiveQuestion, rankedChunks)) {
-            return new ClarificationRequest(
-                    ClarificationType.FUNCTION,
-                    buildFunctionClarificationPrompt());
-        }
-
         if (needsGeneralClarification(effectiveQuestion, rankedChunks)) {
             return new ClarificationRequest(
-                    ClarificationType.GENERAL,
                     "Ik help je graag, maar ik mis nog wat context om je vraag goed te beantwoorden. "
                     + "Kun je iets specifieker aangeven waar je vraag over gaat?");
         }
 
         return null;
-    }
-
-    private boolean needsFunctionClarification(String effectiveQuestion,
-                                               List<ChunkEmbedding> rankedChunks) {
-        if (effectiveQuestion == null || effectiveQuestion.isBlank()) {
-            return false;
-        }
-
-        if (!knowledgeService.detectFunctionLabels(effectiveQuestion).isEmpty()
-                || !knownUserFunctionLabels.isEmpty()) {
-            return false;
-        }
-
-        int functionSpecificChunks = 0;
-        int generalChunks = 0;
-        int limit = Math.min(3, rankedChunks == null ? 0 : rankedChunks.size());
-        for (int i = 0; i < limit; i++) {
-            ChunkEmbedding chunk = rankedChunks.get(i);
-            Set<String> chunkLabels = chunk.getFunctionScope() == null || chunk.getFunctionScope().isEmpty()
-                    ? knowledgeService.detectFunctionLabels(chunk.getText())
-                    : chunk.getFunctionScope();
-
-            if (chunkLabels.isEmpty()) {
-                generalChunks++;
-            } else {
-                functionSpecificChunks++;
-            }
-        }
-
-        return functionSpecificChunks > 0 && generalChunks == 0;
     }
 
     private boolean needsGeneralClarification(String effectiveQuestion,
@@ -188,18 +138,7 @@ public class ChatbotAntwoord {
             return true;
         }
 
-        String normalized = effectiveQuestion.trim().toLowerCase(Locale.ROOT);
-        if (TOPICLESS_QUESTION_PATTERN.matcher(normalized).find()) {
-            return true;
-        }
-
         return rankedChunks == null || rankedChunks.isEmpty();
-    }
-
-    private String buildFunctionClarificationPrompt() {
-        String knownFunctions = String.join(", ", FunctionProfile.getFunctionProfiles().keySet());
-        return "Om je vraag goed te beantwoorden heb ik nog je functie nodig. "
-                + "Welke functie heb je binnen Talentclass? Bijvoorbeeld: " + knownFunctions + ".";
     }
 
     private boolean isContextDependentQuestion(String question) {
@@ -235,26 +174,6 @@ public class ChatbotAntwoord {
             return new PendingResolution(question, question, null);
         }
 
-        if (pendingClarification.type() == ClarificationType.FUNCTION) {
-            Set<String> detectedLabels = knowledgeService.detectFunctionLabels(question);
-            if (detectedLabels.isEmpty()) {
-                return new PendingResolution(
-                        null,
-                        question,
-                        "Ik heb nog steeds je functie nodig om je vraag goed te beantwoorden. "
-                        + "Welke functie heb je precies binnen Talentclass?");
-            }
-
-            knownUserFunctionLabels.clear();
-            knownUserFunctionLabels.addAll(detectedLabels);
-
-            String effectiveQuestion = appendKnownFunctionContext(
-                    pendingClarification.originalQuestion(),
-                    knownUserFunctionLabels);
-            clearPendingClarification();
-            return new PendingResolution(effectiveQuestion, effectiveQuestion, null);
-        }
-
         String effectiveQuestion = pendingClarification.originalQuestion()
                 + "\nAanvullende informatie van gebruiker: " + question.trim();
         clearPendingClarification();
@@ -263,26 +182,6 @@ public class ChatbotAntwoord {
 
     private void clearPendingClarification() {
         pendingClarification = null;
-    }
-
-    private void rememberFunctionFromText(String text) {
-        Set<String> labels = knowledgeService.detectFunctionLabels(text);
-        if (!labels.isEmpty()) {
-            knownUserFunctionLabels.clear();
-            knownUserFunctionLabels.addAll(labels);
-        }
-    }
-
-    private String appendKnownFunctionContext(String question, Set<String> activeFunctionLabels) {
-        if (question == null || question.isBlank() || activeFunctionLabels == null || activeFunctionLabels.isEmpty()) {
-            return question;
-        }
-
-        if (!knowledgeService.detectFunctionLabels(question).isEmpty()) {
-            return question;
-        }
-
-        return question.trim() + "\nBekende functie van gebruiker: " + String.join(", ", activeFunctionLabels);
     }
 
     private List<org.json.JSONObject> getRecentConversationHistory(int maxMessages) {
@@ -403,17 +302,12 @@ public class ChatbotAntwoord {
         return MAX_HISTORY_MESSAGES;
     }
 
-    private record PendingClarification(ClarificationType type, String originalQuestion, String prompt) {
+    private record PendingClarification(String originalQuestion, String prompt) {
     }
 
     private record PendingResolution(String effectiveQuestion, String historyQuestion, String immediateResponse) {
     }
 
-    private record ClarificationRequest(ClarificationType type, String message) {
-    }
-
-    private enum ClarificationType {
-        FUNCTION,
-        GENERAL
+    private record ClarificationRequest(String message) {
     }
 }
