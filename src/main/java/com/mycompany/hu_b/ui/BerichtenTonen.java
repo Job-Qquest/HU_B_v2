@@ -174,6 +174,7 @@ public class BerichtenTonen {
 
         component.setBackground(OUT_OF_MEMORY_BUBBLE_COLOR);
         component.setForeground(WHITE);
+    }
     private void openLink(URI uri) {
         if (uri == null) {
             return;
