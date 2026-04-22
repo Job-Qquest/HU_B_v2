@@ -11,6 +11,7 @@ import java.awt.event.WindowEvent;
 public class AppVenster extends JFrame {
 
     private static final int DEFAULT_REMEMBERED_MESSAGE_LIMIT = 20;
+    private static final Color DARK_NAVY = new Color(0x091E38);
 
     private BerichtenTonen berichtenTonen;
     private InputPanel inputPanel;
@@ -70,6 +71,7 @@ public class AppVenster extends JFrame {
     // Plaatst het chatgedeelte in het midden en het inputgedeelte onderaan.
     private void setupUI() {
         setLayout(new BorderLayout());
+        getContentPane().setBackground(DARK_NAVY);
 
         berichtenTonen = new BerichtenTonen();
         inputPanel = new InputPanel();
