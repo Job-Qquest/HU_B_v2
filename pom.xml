@@ -27,6 +27,13 @@
             <version>3.0.1</version>
         </dependency>
 
+        <!-- Tabula voor tabel-extractie uit PDF's -->
+        <dependency>
+            <groupId>technology.tabula</groupId>
+            <artifactId>tabula</artifactId>
+            <version>1.0.5</version>
+        </dependency>
+
         <!-- Word-documenten lezen (.docx en .doc) -->
         <dependency>
             <groupId>org.apache.poi</groupId>

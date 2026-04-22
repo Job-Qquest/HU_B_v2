@@ -20,7 +20,7 @@ public class ChatbotAntwoord {
     private static final int MAX_PREVIOUS_USER_QUESTIONS = 3;
     private static final int SHORT_FOLLOW_UP_WORD_LIMIT = 8;
     private static final Pattern CONTEXT_DEPENDENT_PATTERN = Pattern.compile(
-            "\\b(dat|dit|deze|die|daar|daarover|daarvan|ervoor|daarvoor|het|ze|zelfde|vorige|eerder)\\b",
+            "\\b(dat|dit|deze|die|daar|daarover|daarvan|ervoor|daarvoor|hierover|hiervan|hiermee|daarmee|zelfde|vorige|eerder|voorgaande|bovenstaande|hierboven|hieronder|hierna)\\b",
             Pattern.CASE_INSENSITIVE);
 
     private final List<org.json.JSONObject> conversationHistory = new ArrayList<>();
@@ -53,8 +53,10 @@ public class ChatbotAntwoord {
         String effectiveQuestion = pendingResolution.effectiveQuestion();
         String historyQuestion = pendingResolution.historyQuestion();
 
-        String contextualQuestion = buildQuestionWithMemory(effectiveQuestion);
-        SearchResult searchResult = knowledgeService.search(contextualQuestion);
+        String searchQuery = effectiveQuestion;
+        String llmQuestion = buildQuestionWithMemory(effectiveQuestion);
+
+        SearchResult searchResult = knowledgeService.search(searchQuery);
         List<ChunkEmbedding> rankedChunks = searchResult.getRankedChunks();
 
         Map<Integer, ChunkEmbedding> sourceById = new LinkedHashMap<>();
@@ -79,9 +81,9 @@ public class ChatbotAntwoord {
         }
 
         String finalSystemPrompt =
-                promptBuilder.buildSystemPrompt(effectiveQuestion, contextString, conversationHistoryText);
+                promptBuilder.buildSystemPrompt(llmQuestion, contextString, conversationHistoryText);
 
-        logChunksForFinalPrompt(contextualQuestion, sourceById, contextString);
+        logChunksForFinalPrompt(searchQuery, sourceById, contextString);
 
         String answer = openAIService.chat(finalSystemPrompt);
         String normalizedAnswer =
@@ -92,8 +94,8 @@ public class ChatbotAntwoord {
         return normalizedAnswer;
     }
 
-    // Verrijkt een korte of verwijzende vervolgvraag met recente gebruikersvragen,
-    // zodat retrieval ook zonder expliciete herhaling genoeg context heeft.
+    // Verrijkt alleen de prompt en nooit de zoekquery.
+    // We doen dit conservatief om context-drift te voorkomen.
     private String buildQuestionWithMemory(String question) {
         if (question == null || question.isBlank()) {
             return question;
@@ -151,22 +153,26 @@ public class ChatbotAntwoord {
             return true;
         }
 
-        String[] words = normalized.split("\\s+");
-        if (words.length > SHORT_FOLLOW_UP_WORD_LIMIT) {
-            return false;
+        String compact = normalized.replaceAll("[!?.,;:]+$", "").trim();
+        int wordCount = compact.isEmpty() ? 0 : compact.split("\\s+").length;
+
+        if (wordCount <= SHORT_FOLLOW_UP_WORD_LIMIT) {
+            return compact.startsWith("en ")
+                    || compact.startsWith("maar ")
+                    || compact.startsWith("dus ")
+                    || compact.startsWith("ja maar ")
+                    || compact.startsWith("hoe zit ")
+                    || compact.startsWith("wat bedoel ")
+                    || compact.startsWith("waarmee ")
+                    || compact.startsWith("daarmee ")
+                    || compact.startsWith("daarover ")
+                    || compact.startsWith("dat dan")
+                    || compact.startsWith("dit dan")
+                    || compact.startsWith("die dan")
+                    || compact.startsWith("zelfde ");
         }
 
-        return normalized.startsWith("en ")
-                || normalized.startsWith("maar ")
-                || normalized.startsWith("hoe ")
-                || normalized.startsWith("wat ")
-                || normalized.startsWith("geldt ")
-                || normalized.startsWith("kan ")
-                || normalized.startsWith("kun ")
-                || normalized.startsWith("is ")
-                || normalized.startsWith("zijn ")
-                || normalized.startsWith("wanneer ")
-                || normalized.startsWith("welke ");
+        return false;
     }
 
     private PendingResolution resolvePendingClarification(String question) {
