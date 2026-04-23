@@ -24,6 +24,9 @@ public abstract class KnowledgeProcessingUtils {
     private static final double GUIDE_WEIGHT = 1.1;                 //boost de personeelsgids chunk (deze moet dus iets hoger staan dan external_weight)
     private static final double EXTERNAL_WEIGHT = 1.0;              //boost de externe bron chunk
     private static final double MAX_DUPLICATE_SIMILARITY = 0.97;    //voorkomt dubbele info. te laag zorgt ervoor dat je altijd maar 1 bron krijgt
+    private static final int TARGET_CHUNK_WORDS = 700;
+    private static final int MAX_CHUNK_WORDS = 800;
+    private static final int CHUNK_OVERLAP_WORDS = 75;
 
     protected KnowledgeProcessingUtils(OpenAI openAIService) {
         this.openAIService = openAIService;
@@ -79,9 +82,9 @@ public abstract class KnowledgeProcessingUtils {
     // terwijl functie-specifieke kopjes worden herkend en bijgehouden.
     // activeScope wordt aangepast zodra een functiekop wordt gevonden.
     public List<ChunkDraft> chunkTextWithFunctionScope(String text, int maxWords, Set<String> activeScope) {
-        List<ChunkDraft> result = new ArrayList<>();
+        List<ChunkDraft> rawResult = new ArrayList<>();
         if (text == null || text.isBlank()) {
-            return result;
+            return rawResult;
         }
 
         StringBuilder buffer = new StringBuilder();
@@ -98,7 +101,7 @@ public abstract class KnowledgeProcessingUtils {
             Set<String> headerLabels = detectFunctionHeaderLabels(line);
             if (!headerLabels.isEmpty()) {
                 if (buffer.length() > 0) {
-                    result.add(new ChunkDraft(buffer.toString().trim(), bufferScope));
+                    rawResult.add(new ChunkDraft(buffer.toString().trim(), bufferScope));
                     buffer.setLength(0);
                     bufferWords = 0;
                 }
@@ -119,7 +122,7 @@ public abstract class KnowledgeProcessingUtils {
             }
 
             if (bufferWords + lineWords > maxWords && buffer.length() > 0) {
-                result.add(new ChunkDraft(buffer.toString().trim(), bufferScope));
+                rawResult.add(new ChunkDraft(buffer.toString().trim(), bufferScope));
                 buffer.setLength(0);
                 bufferWords = 0;
                 bufferScope = new LinkedHashSet<>(activeScope == null ? Set.of() : activeScope);
@@ -133,10 +136,12 @@ public abstract class KnowledgeProcessingUtils {
         }
 
         if (buffer.length() > 0) {
-            result.add(new ChunkDraft(buffer.toString().trim(), bufferScope));
+            rawResult.add(new ChunkDraft(buffer.toString().trim(), bufferScope));
         }
 
-        return result;
+        int effectiveTargetWords = Math.min(Math.max(1, TARGET_CHUNK_WORDS), Math.max(1, maxWords));
+        int effectiveMaxWords = Math.max(effectiveTargetWords, maxWords);
+        return mergeDrafts(rawResult, effectiveTargetWords, effectiveMaxWords, CHUNK_OVERLAP_WORDS);
     }
 
     // Telt het aantal woorden in een stuk tekst.
@@ -145,6 +150,103 @@ public abstract class KnowledgeProcessingUtils {
             return 0;
         }
         return text.trim().split("\\s+").length;
+    }
+
+    private List<ChunkDraft> mergeDrafts(List<ChunkDraft> drafts, int targetWords, int maxWords, int overlapWords) {
+        List<ChunkDraft> merged = new ArrayList<>();
+        if (drafts == null || drafts.isEmpty()) {
+            return merged;
+        }
+
+        String currentText = null;
+        Set<String> currentScope = null;
+        int currentWords = 0;
+
+        for (ChunkDraft draft : drafts) {
+            if (draft == null || draft.getText() == null || draft.getText().isBlank()) {
+                continue;
+            }
+
+            String draftText = draft.getText().trim();
+            Set<String> draftScope = draft.getFunctionScope() == null
+                    ? Set.of()
+                    : new LinkedHashSet<>(draft.getFunctionScope());
+            int draftWords = countWords(draftText);
+
+            if (currentText == null) {
+                currentText = draftText;
+                currentScope = draftScope;
+                currentWords = draftWords;
+                continue;
+            }
+
+            boolean sameScope = scopesEqual(currentScope, draftScope);
+            boolean canMergeNormally = sameScope && currentWords < targetWords && currentWords + draftWords <= maxWords;
+
+            if (canMergeNormally) {
+                currentText = currentText + " " + draftText;
+                currentWords += draftWords;
+                continue;
+            }
+
+            merged.add(new ChunkDraft(currentText.trim(), currentScope));
+
+            String textToStart = draftText;
+            if (sameScope && overlapWords > 0) {
+                String overlap = tailWords(currentText, overlapWords);
+                if (!overlap.isBlank()) {
+                    textToStart = overlap + " " + draftText;
+                    int overlappedWords = countWords(overlap);
+                    int candidateWords = overlappedWords + draftWords;
+                    if (candidateWords <= maxWords) {
+                        currentText = textToStart;
+                        currentScope = draftScope;
+                        currentWords = candidateWords;
+                        continue;
+                    }
+                }
+            }
+
+            currentText = textToStart;
+            currentScope = draftScope;
+            currentWords = countWords(currentText);
+        }
+
+        if (currentText != null && !currentText.isBlank()) {
+            merged.add(new ChunkDraft(currentText.trim(), currentScope));
+        }
+
+        return merged;
+    }
+
+    private boolean scopesEqual(Set<String> left, Set<String> right) {
+        if (left == null || left.isEmpty()) {
+            return right == null || right.isEmpty();
+        }
+        if (right == null || right.isEmpty()) {
+            return false;
+        }
+        return new LinkedHashSet<>(left).equals(new LinkedHashSet<>(right));
+    }
+
+    private String tailWords(String text, int wordCount) {
+        if (text == null || text.isBlank() || wordCount <= 0) {
+            return "";
+        }
+
+        String[] words = text.trim().split("\\s+");
+        if (words.length <= wordCount) {
+            return text.trim();
+        }
+
+        StringBuilder tail = new StringBuilder();
+        for (int i = words.length - wordCount; i < words.length; i++) {
+            if (tail.length() > 0) {
+                tail.append(' ');
+            }
+            tail.append(words[i]);
+        }
+        return tail.toString();
     }
 
     // Probeert functielabels te herkennen in een kopregel.
