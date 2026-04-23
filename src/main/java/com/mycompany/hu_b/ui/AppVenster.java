@@ -6,12 +6,15 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.net.URL;
 
 //Dit is de 'regiseur' van de hele User Interface.
 public class AppVenster extends JFrame {
 
     private static final int DEFAULT_REMEMBERED_MESSAGE_LIMIT = 20;
     private static final Color DARK_NAVY = new Color(0x091E38);
+    private static final Color HEADER_BACKGROUND = Color.WHITE;
+    private static final String LOGO_RESOURCE = "/com/mycompany/hu_b/ui/qquest-logo.png";
 
     private BerichtenTonen berichtenTonen;
     private InputPanel inputPanel;
@@ -52,15 +55,19 @@ public class AppVenster extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                int choice = JOptionPane.showConfirmDialog(
+                Object[] options = {"Ja", "Nee"};
+                int choice = JOptionPane.showOptionDialog(
                         AppVenster.this,
                         "Weet je zeker dat je de chatbot wilt sluiten?\n"
                         + "Bij het afsluiten wordt de gespreksgeschiedenis gewist.",
                         "Chatbot Afsluiten",
-                        JOptionPane.YES_NO_OPTION,
-                        JOptionPane.WARNING_MESSAGE);
+                        JOptionPane.DEFAULT_OPTION,
+                        JOptionPane.WARNING_MESSAGE,
+                        null,
+                        options,
+                        options[0]);
 
-                if (choice == JOptionPane.YES_OPTION) {
+                if (choice == 0) {
                     dispose();
                 }
             }
@@ -73,11 +80,41 @@ public class AppVenster extends JFrame {
         setLayout(new BorderLayout());
         getContentPane().setBackground(DARK_NAVY);
 
+        JPanel headerPanel = buildHeaderPanel();
         berichtenTonen = new BerichtenTonen();
         inputPanel = new InputPanel();
 
+        add(headerPanel, BorderLayout.NORTH);
         add(berichtenTonen.getScrollPane(), BorderLayout.CENTER);
         add(inputPanel.getPanel(), BorderLayout.SOUTH);
+    }
+
+    private JPanel buildHeaderPanel() {
+        JPanel headerPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 12));
+        headerPanel.setBackground(HEADER_BACKGROUND);
+        headerPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(0xD9E2F2)));
+
+        JLabel logoLabel = new JLabel();
+        ImageIcon logoIcon = loadLogoIcon();
+        if (logoIcon != null) {
+            logoLabel.setIcon(logoIcon);
+            logoLabel.setText("");
+        } else {
+            logoLabel.setText("Qquest");
+            logoLabel.setFont(logoLabel.getFont().deriveFont(Font.BOLD, 24f));
+            logoLabel.setForeground(DARK_NAVY);
+        }
+
+        headerPanel.add(logoLabel);
+        return headerPanel;
+    }
+
+    private ImageIcon loadLogoIcon() {
+        URL resource = AppVenster.class.getResource(LOGO_RESOURCE);
+        if (resource == null) {
+            return null;
+        }
+        return new ImageIcon(resource);
     }
 
     // ===== UI acties =====

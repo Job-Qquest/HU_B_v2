@@ -4,10 +4,12 @@ import com.mycompany.hu_b.model.ChunkEmbedding;
 import com.mycompany.hu_b.service.KnowledgeProcessingUtils.SearchResult;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 // Bouwt het uiteindelijke chatbotantwoord op.
@@ -120,6 +122,11 @@ public class ChatbotAntwoord {
 
     private ClarificationRequest determineClarificationRequest(String effectiveQuestion,
                                                                List<ChunkEmbedding> rankedChunks) {
+        ClarificationRequest functionClarification = determineFunctionClarificationRequest(effectiveQuestion, rankedChunks);
+        if (functionClarification != null) {
+            return functionClarification;
+        }
+
         if (needsGeneralClarification(effectiveQuestion, rankedChunks)) {
             return new ClarificationRequest(
                     "Ik help je graag, maar ik mis nog wat context om je vraag goed te beantwoorden. "
@@ -135,12 +142,57 @@ public class ChatbotAntwoord {
             return true;
         }
 
-        int tokenCount = knowledgeService.tokenize(effectiveQuestion).size();
-        if (tokenCount <= 1) {
-            return true;
+        if (rankedChunks != null && !rankedChunks.isEmpty()) {
+            return false;
         }
 
-        return rankedChunks == null || rankedChunks.isEmpty();
+        String normalized = effectiveQuestion.trim().toLowerCase(Locale.ROOT);
+        return isContextDependentQuestion(normalized)
+                || normalized.length() < 10;
+    }
+
+    private ClarificationRequest determineFunctionClarificationRequest(String effectiveQuestion,
+                                                                       List<ChunkEmbedding> rankedChunks) {
+        if (effectiveQuestion == null || effectiveQuestion.isBlank() || rankedChunks == null || rankedChunks.isEmpty()) {
+            return null;
+        }
+
+        if (!isContextDependentQuestion(effectiveQuestion)) {
+            return null;
+        }
+
+        Set<String> questionFunctions = knowledgeService.detectFunctionLabels(effectiveQuestion);
+        if (!questionFunctions.isEmpty()) {
+            return null;
+        }
+
+        int inspectedChunks = Math.min(3, rankedChunks.size());
+        Set<String> explicitScopes = new LinkedHashSet<>();
+        boolean hasGeneralChunk = false;
+
+        for (int i = 0; i < inspectedChunks; i++) {
+            ChunkEmbedding chunk = rankedChunks.get(i);
+            if (chunk == null) {
+                continue;
+            }
+
+            Set<String> scope = chunk.getFunctionScope();
+            if (scope == null || scope.isEmpty()) {
+                hasGeneralChunk = true;
+                continue;
+            }
+
+            explicitScopes.addAll(scope);
+        }
+
+        if (hasGeneralChunk || explicitScopes.size() != 1) {
+            return null;
+        }
+
+        String functionLabel = explicitScopes.iterator().next();
+        return new ClarificationRequest(
+                "Voor welke functie geldt je vraag? Ik zie dat dit onderdeel functie-afhankelijk is. "
+                + "Noem bijvoorbeeld " + functionLabel + " als dat de juiste context is.");
     }
 
     private boolean isContextDependentQuestion(String question) {

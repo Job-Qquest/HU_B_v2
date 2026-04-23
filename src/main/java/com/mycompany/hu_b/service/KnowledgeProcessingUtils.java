@@ -409,22 +409,12 @@ public abstract class KnowledgeProcessingUtils {
             return true;
         }
 
-        if (chunk.getFunctionScope() != null && !chunk.getFunctionScope().isEmpty()) {
-            for (String label : requiredLabels) {
-                if (chunk.getFunctionScope().contains(label)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        Set<String> chunkLabels = detectFunctionLabels(chunk.getText());
-        if (chunkLabels.isEmpty()) {
+        if (chunk.getFunctionScope() == null || chunk.getFunctionScope().isEmpty()) {
             return true;
         }
 
         for (String label : requiredLabels) {
-            if (chunkLabels.contains(label)) {
+            if (chunk.getFunctionScope().contains(label)) {
                 return true;
             }
         }
