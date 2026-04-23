@@ -75,9 +75,10 @@ public class ChatbotPrompt {
             return;
         }
 
-// Bepaalt voor welke functie deze chunk geldt
-        Set<String> chunkFunctions = (c.getFunctionScope() == null || c.getFunctionScope().isEmpty())
-                ? knowledgeService.detectFunctionLabels(c.getText())
+// Gebruik alleen expliciete functiemetadata uit de chunk zelf.
+// Als we labels uit de tekst afleiden, krijgen algemene chunks te snel een functie mee.
+        Set<String> chunkFunctions = c.getFunctionScope() == null
+                ? Set.of()
                 : c.getFunctionScope();
 
         String sourceType = c.isPrimaryGuide()
