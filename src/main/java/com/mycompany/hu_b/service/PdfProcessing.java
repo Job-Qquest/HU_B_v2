@@ -75,6 +75,7 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
             for (PdfChapterBuffer chapter : chapters) {
                 flushChapterBufferToChunks(chapter, sourceLabel, pdfFile.toString(), true, true);
             }
+            appendPayrollTableChunks(doc, pdfFile, sourceLabel, true);
         }
 
         for (Path linkedWordFile : linkedWordFiles) {
@@ -118,7 +119,128 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
             for (PdfChapterBuffer chapter : chapters) {
                 flushChapterBufferToChunks(chapter, sourceLabel, pdfPath.toString(), true, false);
             }
+            appendPayrollTableChunks(doc, pdfPath, sourceLabel, false);
         }
+    }
+
+    private void appendPayrollTableChunks(PDDocument document, Path pdfPath, String sourceLabel, boolean primaryGuide) throws Exception {
+        if (document == null || pdfPath == null) {
+            return;
+        }
+
+        for (int pageNumber = 1; pageNumber <= document.getNumberOfPages(); pageNumber++) {
+            String pageText = extractSinglePageText(document, pageNumber);
+            if (!isLikelyPayrollTablePage(pageText)) {
+                continue;
+            }
+
+            List<String> tables = TabulaTableExtractor.extractPageTablesAsText(document, pageNumber);
+            if (tables == null || tables.isEmpty()) {
+                continue;
+            }
+
+            for (String tableText : tables) {
+                if (tableText == null || tableText.isBlank()) {
+                    continue;
+                }
+
+                String normalizedTable = normalizeTableChunkText(tableText);
+                if (normalizedTable.isBlank() || countWords(normalizedTable) < 12) {
+                    continue;
+                }
+
+                Set<String> scope = detectFunctionLabels(normalizedTable + "\n" + (pageText == null ? "" : pageText));
+                String payrollChunkText = buildPayrollTableChunkText(sourceLabel, pageNumber, normalizedTable);
+                chunks.add(new ChunkEmbedding(
+                        payrollChunkText,
+                        openAIService.embed(payrollChunkText),
+                        pageNumber,
+                        scope,
+                        sourceLabel,
+                        null,
+                        null,
+                        pdfPath.toString(),
+                        true,
+                        primaryGuide));
+            }
+        }
+    }
+
+    private String extractSinglePageText(PDDocument document, int pageNumber) throws Exception {
+        if (document == null || pageNumber < 1 || pageNumber > document.getNumberOfPages()) {
+            return "";
+        }
+
+        PDFTextStripper stripper = new PDFTextStripper();
+        stripper.setStartPage(pageNumber);
+        stripper.setEndPage(pageNumber);
+        String pageText = stripper.getText(document);
+        return pageText == null ? "" : pageText.trim();
+    }
+
+    private boolean isLikelyPayrollTablePage(String pageText) {
+        if (pageText == null || pageText.isBlank()) {
+            return false;
+        }
+
+        String normalized = pageText.toLowerCase(Locale.ROOT);
+        int keywordHits = 0;
+        String[] keywords = {
+                "loontabel",
+                "salaris",
+                "loon",
+                "bruto",
+                "trede",
+                "schaal",
+                "uurloon",
+                "maandsalaris",
+                "jaarsalaris",
+                "beloning"
+        };
+        for (String keyword : keywords) {
+            if (normalized.contains(keyword)) {
+                keywordHits++;
+            }
+        }
+
+        if (keywordHits < 2) {
+            return false;
+        }
+
+        int digitCount = 0;
+        for (int i = 0; i < pageText.length(); i++) {
+            if (Character.isDigit(pageText.charAt(i))) {
+                digitCount++;
+            }
+        }
+
+        return digitCount >= 12 || normalized.contains("\u20AC") || normalized.contains("%");
+    }
+
+    private String normalizeTableChunkText(String text) {
+        if (text == null) {
+            return "";
+        }
+
+        return text
+                .replace("\r", "\n")
+                .replaceAll("[ \\t]+", " ")
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
+    }
+
+    private String buildPayrollTableChunkText(String sourceLabel, int pageNumber, String tableText) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("LOONTABEL");
+        if (sourceLabel != null && !sourceLabel.isBlank()) {
+            builder.append(" | ").append(sourceLabel.trim());
+        }
+        if (pageNumber > 0) {
+            builder.append(" | pagina ").append(pageNumber);
+        }
+        builder.append(System.lineSeparator()).append(System.lineSeparator());
+        builder.append(tableText == null ? "" : tableText.trim());
+        return builder.toString().trim();
     }
 
     private void addOrMergePdfChunk(List<PendingPdfChunk> pendingChunks,
@@ -437,7 +559,7 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
                 if (isLikelyChapterContinuation(nextLine)) {
                     String merged = line + " " + nextLine;
                     int mergedScore = chapterHeaderScore(merged, i);
-                    if (mergedScore > score) {
+                    if (mergedScore >= score && merged.length() > line.length()) {
                         score = mergedScore;
                         candidate = merged;
                         candidateLineCount = 2;
@@ -616,7 +738,7 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
         }
 
         int words = countWords(normalized);
-        if (words < 2 || words > 6) {
+        if (words < 1 || words > 6) {
             return false;
         }
 

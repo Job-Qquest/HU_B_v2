@@ -303,7 +303,11 @@ public abstract class KnowledgeProcessingUtils {
             double semanticScore = cosine(c.getEmbedding(), qVec);
             double lexicalScore = lexicalSimilarity(retrievalQuery, c.getText());
             double baseScore = (semanticScore * 0.80) + (lexicalScore * 0.20);
-            double weightedScore = baseScore * (c.isPrimaryGuide() ? GUIDE_WEIGHT : EXTERNAL_WEIGHT);
+            double scopeWeight = functionLabels.isEmpty() || matchesFunctionScope(c, functionLabels) ? 1.05 : 1.0;
+            if (talentclassVraag && isTalentclassChunk(c)) {
+                scopeWeight *= 1.05;
+            }
+            double weightedScore = baseScore * (c.isPrimaryGuide() ? GUIDE_WEIGHT : EXTERNAL_WEIGHT) * scopeWeight;
             scoredChunks.add(new ScoredChunk(c, baseScore, weightedScore));
         }
 
@@ -490,7 +494,29 @@ public abstract class KnowledgeProcessingUtils {
 
     // Detecteert of een chunk tekst over Talentclass gaat.
     public boolean isTalentclassChunk(ChunkEmbedding chunk) {
-        if (chunk == null || chunk.getText() == null) {
+        if (chunk == null) {
+            return false;
+        }
+
+        Set<String> scope = chunk.getFunctionScope();
+        if (scope != null && !scope.isEmpty()) {
+            for (String label : scope) {
+                if (label == null) {
+                    continue;
+                }
+                String normalizedLabel = label.toLowerCase(Locale.ROOT);
+                if (normalizedLabel.contains("talentclass")
+                        || normalizedLabel.contains("talent class")
+                        || normalizedLabel.contains("tc consultant")
+                        || normalizedLabel.contains("tc-consultant")
+                        || normalizedLabel.contains("tc consultants")
+                        || normalizedLabel.contains("tc-consultants")) {
+                    return true;
+                }
+            }
+        }
+
+        if (chunk.getText() == null) {
             return false;
         }
 
@@ -531,15 +557,6 @@ public abstract class KnowledgeProcessingUtils {
         if (candidate == null || candidate.getText() == null || candidate.getText().isBlank()) {
             return false;
         }
-
-        if (!functionLabels.isEmpty() && !matchesFunctionScope(candidate, functionLabels)) {
-            return false;
-        }
-
-        if (talentclassVraag && !referralVraag && !isTalentclassChunk(candidate)) {
-            return false;
-        }
-
         return true;
     }
 

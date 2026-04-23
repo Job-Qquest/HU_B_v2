@@ -99,8 +99,77 @@ public class ChatbotPrompt {
                 .append(" | FUNCTIEAFHANKELIJK: ")
                 .append(functionMarker)
                 .append(": ")
-                .append(c.getText())
+                .append(formatChunkTextForContext(c))
                 .append("\n\n");
+    }
+
+    private String formatChunkTextForContext(ChunkEmbedding chunk) {
+        if (chunk == null || chunk.getText() == null) {
+            return "";
+        }
+
+        String text = chunk.getText().trim();
+        if (text.isBlank()) {
+            return "";
+        }
+
+        if (!isLikelyTableChunk(text)) {
+            return text;
+        }
+
+        String[] lines = text.replace("\r", "\n").split("\\R");
+        StringBuilder formatted = new StringBuilder();
+        for (String rawLine : lines) {
+            String line = rawLine == null ? "" : rawLine.trim();
+            if (line.isBlank()) {
+                continue;
+            }
+
+            line = line.replace("\t", " | ");
+            line = line.replaceAll("\\s*\\|\\s*", " | ");
+            line = line.replaceAll("\\s{2,}", " ");
+
+            if (formatted.length() > 0) {
+                formatted.append("\n");
+            }
+            formatted.append(line);
+        }
+
+        return formatted.toString().trim();
+    }
+
+    private boolean isLikelyTableChunk(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+
+        String normalized = text.trim().toUpperCase();
+        if (normalized.startsWith("LOONTABEL")) {
+            return true;
+        }
+
+        String[] lines = text.split("\\R");
+        if (lines.length < 4) {
+            return false;
+        }
+
+        int numericLines = 0;
+        int separatorHits = 0;
+        for (String line : lines) {
+            String trimmed = line == null ? "" : line.trim();
+            if (trimmed.isBlank()) {
+                continue;
+            }
+
+            if (trimmed.matches(".*\\d.*")) {
+                numericLines++;
+            }
+            if (trimmed.contains("\t") || trimmed.contains(" | ")) {
+                separatorHits++;
+            }
+        }
+
+        return numericLines >= 3 || separatorHits >= 2;
     }
 
 // Maakt een leesbare bronverwijzing voor de context.
@@ -160,13 +229,18 @@ public class ChatbotPrompt {
 "Als het antwoord daar niet staat geef je aan wat je niet weet." +
 "Als je geen antwoord kan vinden, geef je vriendelijk aan dat je dit niet weet." +
 "Als het niet binnen de context van de personeelsgids en/of meegegeven bronnen valt, geef je vriendelijk aan dat je daar niet bij kan helpen." + 
+"De gesprekshistorie is uitsluitend ondersteunend voor de gesprekssamenhang en is nooit een bron voor feitelijke antwoorden. " +
+"Als de gesprekshistorie en de <context> elkaar tegenspreken, volg altijd de <context> en negeer eerdere antwoorden uit het gesprek voor de feiten." +
                 
 "2. Scope: Behandel de vraag alleen binnen de HR-context van de personeelsgids en/of meegegeven bronnen."+
 "Als de vraag een specifieke doelgroep/functie noemt (zoals Talentclass of TC consultant), gebruik dan alleen context waarin die doelgroep/functie expliciet voorkomt, behalve bij referral/voordracht-vragen waar een algemene referralregeling van toepassing kan zijn. " +
 
 "2b. Doorvragen bij onduidelijkheid: Als gebruikersinformatie ontbreekt om de vraag volledig te beantwoorden, stel dan eerst 1 gerichte vervolgvraag voor context. " +
-
+"-Bij vragen over salaris, loon, schaal, trede, beloning of periodiek moet je altijd eerst controleren of de functie expliciet genoemd is. Als de functie ontbreekt of onduidelijk is, stel dan eerst één gerichte vervolgvraag, bijvoorbeeld: 'Voor welke functie bedoel je het salaris?' Geef in dat geval nog geen salarisantwoord." +
+"-Als de context een loontabel bevat, gebruik die dan pas nadat de functie bekend is." + 
+                
 "3. Geen Hallucinaties: Verzin nooit paginanummers, citaten, data of percentages die niet letterlijk in de tekst staan. " +
+"- Als de context een loontabel of andere tabel bevat, vat die dan gestructureerd samen, focus op ervaringsniveau, met behoud van alle bedragen, bandbreedtes, tredes en periodieken. Laat geen numerieke waarden weg, verzin niets, en behoud de tabelbetekenis zo exact mogelijk." +
 
 "4. Bronvermelding (verplicht): " +
 "Als informatie uit de PERSONEELSGIDS wordt gebruikt, moet je: " +
