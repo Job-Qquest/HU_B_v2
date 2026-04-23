@@ -29,7 +29,8 @@ public class ChatbotAntwoordVerfijner {
 
 // Als er geen antwoord is
         if (rawAnswer == null || rawAnswer.isBlank()) {
-            return "Antwoord: Ik kan geen antwoord genereren op basis van de aangeleverde context.\n"
+            return "Functie: Algemeen\n"
+                    + "Antwoord: Ik kan geen antwoord genereren op basis van de aangeleverde context.\n"
                     + "Bron: N.v.t.";
         }
 
@@ -42,6 +43,8 @@ public class ChatbotAntwoordVerfijner {
 
 // Haal bron-ID's op
         String bronField = extractField(rawAnswer, "BronID:");
+        String functieField = extractField(rawAnswer, "Functie:");
+        String assumedFunction = resolveAssumedFunction(question, functieField, sourceById);
         Set<String> citedReferences = new LinkedHashSet<>();
         Set<String> allCitedReferences = new LinkedHashSet<>();
 // Scores per bronverwijzing
@@ -88,8 +91,94 @@ public class ChatbotAntwoordVerfijner {
             bronText = String.join(", ", citedReferences);
         }
 // Eindresultaat
-        return "Antwoord: " + answerText.trim() + "\n"
+        return "Functie: " + assumedFunction + "\n"
+                + "Antwoord: " + answerText.trim() + "\n"
                 + "Bron: " + bronText;
+    }
+
+    private String resolveAssumedFunction(String question,
+                                          String functionField,
+                                          Map<Integer, ChunkEmbedding> sourceById) {
+        String normalizedField = normalizeFunctionLabel(functionField);
+        if (normalizedField != null) {
+            return normalizedField;
+        }
+
+        String questionFunction = inferSingleFunction(knowledgeService.detectFunctionLabels(question));
+        if (questionFunction != null) {
+            return questionFunction;
+        }
+
+        String sourceFunction = inferDominantFunction(sourceById);
+        return sourceFunction == null ? "Algemeen" : sourceFunction;
+    }
+
+    private String inferSingleFunction(Set<String> labels) {
+        if (labels == null || labels.isEmpty()) {
+            return null;
+        }
+
+        if (labels.size() == 1) {
+            return labels.iterator().next();
+        }
+
+        return "Meerdere functies";
+    }
+
+    private String inferDominantFunction(Map<Integer, ChunkEmbedding> sourceById) {
+        if (sourceById == null || sourceById.isEmpty()) {
+            return null;
+        }
+
+        Map<String, Integer> counts = new java.util.LinkedHashMap<>();
+        for (ChunkEmbedding chunk : sourceById.values()) {
+            if (chunk == null || chunk.getFunctionScope() == null || chunk.getFunctionScope().isEmpty()) {
+                continue;
+            }
+
+            for (String label : chunk.getFunctionScope()) {
+                if (label == null || label.isBlank()) {
+                    continue;
+                }
+                counts.merge(label, 1, Integer::sum);
+            }
+        }
+
+        if (counts.isEmpty()) {
+            return null;
+        }
+
+        int bestCount = 0;
+        List<String> bestLabels = new ArrayList<>();
+        for (Map.Entry<String, Integer> entry : counts.entrySet()) {
+            int count = entry.getValue();
+            if (count > bestCount) {
+                bestCount = count;
+                bestLabels.clear();
+                bestLabels.add(entry.getKey());
+            } else if (count == bestCount) {
+                bestLabels.add(entry.getKey());
+            }
+        }
+
+        if (bestLabels.size() == 1) {
+            return bestLabels.get(0);
+        }
+
+        return "Meerdere functies";
+    }
+
+    private String normalizeFunctionLabel(String functionField) {
+        if (functionField == null) {
+            return null;
+        }
+
+        String normalized = functionField.trim();
+        if (normalized.isEmpty() || normalized.equalsIgnoreCase("N.v.t.")) {
+            return null;
+        }
+
+        return normalized;
     }
 
 // Zet een chunk om naar een bronverwijzing die klopt voor PDF en Word.

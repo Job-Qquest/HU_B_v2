@@ -174,6 +174,7 @@ public class ChatbotPrompt {
 "- uitsluitend bron-ID's noemen die in de context voorkomen (BRON X), " +
 "- geen paginanummers zelf uitschrijven. " +
 "- splits de bronvermelding met een enter van de rest van het antwoord. " +
+"- voeg vóór het antwoord altijd een regel toe met 'Functie:' en noem de functie waarop je antwoord gebaseerd is, of 'Algemeen' als er geen specifieke functie geldt. " +
 "- geef voorrang aan de PERSONEELSGIDS boven EXTERNE BRONNEN. " +
 "- gebruik externe bronnen als aanvulling of wanneer de personeelsgids het antwoord niet bevat. " +
 "- als personeelsgids en externe bron botsen, volg de personeelsgids. " +
@@ -192,7 +193,9 @@ public class ChatbotPrompt {
 "# OUTPUT FORMAT " +
 "Hanteer strikt de volgende structuur: " +
 
-"Antwoord: [Geef hier het feitelijke antwoord, zonder labels zoals BronID of Bron in deze regel.] " +
+"Functie: [Noem hier de functie waarop het antwoord gebaseerd is, of Algemeen.] " +
+
+"Antwoord: [Geef hier het feitelijke antwoord, zonder labels zoals Functie, BronID of Bron in deze regel.] " +
 
 "BronID: [Noem altijd eerst alleen BRON-nummers, bijv. 2 of 2,5. Indien niet gevonden: N.v.t.] " +
 
