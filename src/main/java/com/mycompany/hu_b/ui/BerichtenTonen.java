@@ -3,6 +3,8 @@ package com.mycompany.hu_b.ui;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
+import java.io.File;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -102,6 +104,20 @@ public class BerichtenTonen {
         }
 
         bubble.setOpaque(true);
+        bubble.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
+        bubble.addHyperlinkListener(event -> {
+            if (event.getEventType() == javax.swing.event.HyperlinkEvent.EventType.ACTIVATED) {
+                try {
+                    openLink(event.getURL() != null ? event.getURL().toURI() : null);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+            } else if (event.getEventType() == javax.swing.event.HyperlinkEvent.EventType.ENTERED) {
+                bubble.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            } else if (event.getEventType() == javax.swing.event.HyperlinkEvent.EventType.EXITED) {
+                bubble.setCursor(Cursor.getPredefinedCursor(Cursor.TEXT_CURSOR));
+            }
+        });
 
         JPanel container = new JPanel(new BorderLayout());
         container.setOpaque(false);
@@ -158,6 +174,27 @@ public class BerichtenTonen {
 
         component.setBackground(OUT_OF_MEMORY_BUBBLE_COLOR);
         component.setForeground(WHITE);
+    }
+    private void openLink(URI uri) {
+        if (uri == null) {
+            return;
+        }
+
+        try {
+            if (!Desktop.isDesktopSupported()) {
+                return;
+            }
+
+            Desktop desktop = Desktop.getDesktop();
+            String scheme = uri.getScheme();
+            if (scheme != null && scheme.equalsIgnoreCase("file")) {
+                desktop.open(new File(uri));
+            } else {
+                desktop.browse(uri);
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
     }
 
     // Geeft de scrollbare container van het chatgedeelte terug.
