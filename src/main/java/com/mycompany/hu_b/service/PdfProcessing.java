@@ -175,7 +175,7 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
         stripper.setStartPage(pageNumber);
         stripper.setEndPage(pageNumber);
         String pageText = stripper.getText(document);
-        return pageText == null ? "" : pageText.trim();
+        return sanitizeGuideText(pageText);
     }
 
     private boolean isLikelyPayrollTablePage(String pageText) {
@@ -222,11 +222,56 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
             return "";
         }
 
-        return text
+        return sanitizeGuideText(text)
                 .replace("\r", "\n")
                 .replaceAll("[ \\t]+", " ")
                 .replaceAll("\\n{3,}", "\n\n")
                 .trim();
+    }
+
+    private static String sanitizeGuideText(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+
+        String[] lines = text.replace("\r", "\n").split("\\R");
+        StringBuilder cleaned = new StringBuilder();
+
+        for (String rawLine : lines) {
+            String line = rawLine == null ? "" : rawLine.trim();
+            if (line.isBlank() || isGuideFooterLine(line)) {
+                continue;
+            }
+
+            if (cleaned.length() > 0) {
+                cleaned.append("\n");
+            }
+            cleaned.append(line);
+        }
+
+        return cleaned.toString().trim();
+    }
+
+    private static boolean isGuideFooterLine(String line) {
+        if (line == null || line.isBlank()) {
+            return false;
+        }
+
+        String normalized = line.toLowerCase(Locale.ROOT)
+                .replace('\u00A0', ' ')
+                .trim();
+
+        if (normalized.contains("personeelsgids") && normalized.contains("business unit")) {
+            return true;
+        }
+
+        if (normalized.matches(".*\\bpagina\\s+\\d+\\s+van\\s+\\d+\\b.*")) {
+            return true;
+        }
+
+        return normalized.contains("personeelsgids")
+                && normalized.contains("pagina")
+                && normalized.matches(".*\\d+.*");
     }
 
     private String buildPayrollTableChunkText(String sourceLabel, int pageNumber, String tableText) {
@@ -289,6 +334,7 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
             stripper.setEndPage(page);
 
             String pageText = stripper.getText(doc);
+            pageText = sanitizeGuideText(pageText);
             if (pageText == null || pageText.isBlank()) {
                 continue;
             }
@@ -884,6 +930,7 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
         }
 
         private void appendPage(int pageNumber, String pageText) {
+            pageText = PdfProcessing.sanitizeGuideText(pageText);
             if (pageText == null || pageText.isBlank()) {
                 return;
             }
@@ -893,6 +940,7 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
         }
 
         private void appendFragment(int pageNumber, String textFragment) {
+            textFragment = PdfProcessing.sanitizeGuideText(textFragment);
             if (textFragment == null || textFragment.isBlank()) {
                 return;
             }

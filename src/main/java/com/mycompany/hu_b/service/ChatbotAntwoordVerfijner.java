@@ -99,18 +99,20 @@ public class ChatbotAntwoordVerfijner {
     private String resolveAssumedFunction(String question,
                                           String functionField,
                                           Map<Integer, ChunkEmbedding> sourceById) {
-        String normalizedField = normalizeFunctionLabel(functionField);
-        if (normalizedField != null) {
-            return normalizedField;
-        }
-
-        String questionFunction = inferSingleFunction(knowledgeService.detectFunctionLabels(question));
+        Set<String> questionFunctions = knowledgeService.detectFunctionLabels(question);
+        String questionFunction = inferSingleFunction(questionFunctions);
         if (questionFunction != null) {
             return questionFunction;
         }
 
-        String sourceFunction = inferDominantFunction(sourceById);
-        return sourceFunction == null ? "Algemeen" : sourceFunction;
+        if (functionField != null && !functionField.isBlank()) {
+            String normalizedField = normalizeFunctionLabel(functionField);
+            if (normalizedField != null && "Meerdere functies".equals(normalizedField)) {
+                return normalizedField;
+            }
+        }
+
+        return "Algemeen";
     }
 
     private String inferSingleFunction(Set<String> labels) {

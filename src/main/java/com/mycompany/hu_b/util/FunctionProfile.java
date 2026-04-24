@@ -69,7 +69,12 @@ public class FunctionProfile {
         }
 
         String normalizedLine = normalizeForMatching(line);
-        if (normalizedLine.length() > 90) {
+        if (normalizedLine.length() > 50) {
+            return labels;
+        }
+
+        String[] words = normalizedLine.split("\\s+");
+        if (words.length > 5 || normalizedLine.matches(".*\\d.*")) {
             return labels;
         }
 
