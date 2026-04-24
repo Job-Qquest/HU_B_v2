@@ -345,14 +345,7 @@ public class PdfProcessing extends KnowledgeProcessingUtils {
         }
 
         String chapterText = chapter.getText();
-        Set<String> chapterScope = detectFunctionLabels(chapterText);
-
-        List<ChunkDraft> drafts;
-        if (countWords(chapterText) <= 800) {
-            drafts = List.of(new ChunkDraft(chapterText.trim(), chapterScope));
-        } else {
-            drafts = chunkTextWithFunctionScope(chapterText, 800, new LinkedHashSet<>());
-        }
+        List<ChunkDraft> drafts = chunkTextWithFunctionScope(chapterText, 800, new LinkedHashSet<>());
 
         List<PendingPdfChunk> pendingChunks = new ArrayList<>();
         int runningWords = 0;
