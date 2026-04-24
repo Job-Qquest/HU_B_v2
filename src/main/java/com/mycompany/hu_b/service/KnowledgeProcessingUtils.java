@@ -26,7 +26,6 @@ public abstract class KnowledgeProcessingUtils {
     private static final double MAX_DUPLICATE_SIMILARITY = 0.97;    //voorkomt dubbele info. te laag zorgt ervoor dat je altijd maar 1 bron krijgt
     private static final int TARGET_CHUNK_WORDS = 700;
     private static final int MAX_CHUNK_WORDS = 800;
-    private static final int CHUNK_OVERLAP_WORDS = 75;
 
     protected KnowledgeProcessingUtils(OpenAI openAIService) {
         this.openAIService = openAIService;
@@ -91,48 +90,58 @@ public abstract class KnowledgeProcessingUtils {
         int bufferWords = 0;
         Set<String> bufferScope = new LinkedHashSet<>(activeScope == null ? Set.of() : activeScope);
 
-        String[] lines = text.split("\\R");
-        for (String rawLine : lines) {
-            String line = rawLine == null ? "" : rawLine.trim();
-            if (line.isEmpty()) {
+        // Splits eerst op paragrafen voor natuurlijke tekstgrenzen
+        String[] paragraphs = text.split("\\n\\n+");
+        for (String rawPara : paragraphs) {
+            String para = rawPara == null ? "" : rawPara.trim();
+            if (para.isEmpty()) {
                 continue;
             }
 
-            Set<String> headerLabels = detectFunctionHeaderLabels(line);
-            if (!headerLabels.isEmpty()) {
-                if (buffer.length() > 0) {
+            // Verwerk elke paragraaf regel voor regel voor header-detectie
+            String[] lines = para.split("\\R");
+            for (String rawLine : lines) {
+                String line = rawLine == null ? "" : rawLine.trim();
+                if (line.isEmpty()) {
+                    continue;
+                }
+
+                Set<String> headerLabels = detectFunctionHeaderLabels(line);
+                if (!headerLabels.isEmpty()) {
+                    if (buffer.length() > 0) {
+                        rawResult.add(new ChunkDraft(buffer.toString().trim(), bufferScope));
+                        buffer.setLength(0);
+                        bufferWords = 0;
+                    }
+
+                    if (activeScope != null) {
+                        activeScope.clear();
+                        activeScope.addAll(headerLabels);
+                        bufferScope = new LinkedHashSet<>(activeScope);
+                    } else {
+                        bufferScope = new LinkedHashSet<>(headerLabels);
+                    }
+                    continue;
+                }
+
+                int lineWords = countWords(line);
+                if (lineWords == 0) {
+                    continue;
+                }
+
+                if (bufferWords + lineWords > maxWords && buffer.length() > 0) {
                     rawResult.add(new ChunkDraft(buffer.toString().trim(), bufferScope));
                     buffer.setLength(0);
                     bufferWords = 0;
+                    bufferScope = new LinkedHashSet<>(activeScope == null ? Set.of() : activeScope);
                 }
 
-                if (activeScope != null) {
-                    activeScope.clear();
-                    activeScope.addAll(headerLabels);
-                    bufferScope = new LinkedHashSet<>(activeScope);
-                } else {
-                    bufferScope = new LinkedHashSet<>(headerLabels);
+                if (buffer.length() > 0) {
+                    buffer.append(' ');
                 }
-                continue;
+                buffer.append(line);
+                bufferWords += lineWords;
             }
-
-            int lineWords = countWords(line);
-            if (lineWords == 0) {
-                continue;
-            }
-
-            if (bufferWords + lineWords > maxWords && buffer.length() > 0) {
-                rawResult.add(new ChunkDraft(buffer.toString().trim(), bufferScope));
-                buffer.setLength(0);
-                bufferWords = 0;
-                bufferScope = new LinkedHashSet<>(activeScope == null ? Set.of() : activeScope);
-            }
-
-            if (buffer.length() > 0) {
-                buffer.append(' ');
-            }
-            buffer.append(line);
-            bufferWords += lineWords;
         }
 
         if (buffer.length() > 0) {
@@ -141,7 +150,8 @@ public abstract class KnowledgeProcessingUtils {
 
         int effectiveTargetWords = Math.min(Math.max(1, TARGET_CHUNK_WORDS), Math.max(1, maxWords));
         int effectiveMaxWords = Math.max(effectiveTargetWords, maxWords);
-        return mergeDrafts(rawResult, effectiveTargetWords, effectiveMaxWords, CHUNK_OVERLAP_WORDS);
+        int effectiveOverlapWords = Math.min(50, effectiveTargetWords / 10); // Max 50 woorden, of 10% van target
+        return mergeDrafts(rawResult, effectiveTargetWords, effectiveMaxWords, effectiveOverlapWords);
     }
 
     // Telt het aantal woorden in een stuk tekst.
@@ -181,35 +191,18 @@ public abstract class KnowledgeProcessingUtils {
             }
 
             boolean sameScope = scopesEqual(currentScope, draftScope);
-            boolean canMergeNormally = sameScope && currentWords < targetWords && currentWords + draftWords <= maxWords;
+            boolean canMerge = sameScope && currentWords + draftWords <= maxWords;
 
-            if (canMergeNormally) {
+            if (canMerge) {
                 currentText = currentText + " " + draftText;
                 currentWords += draftWords;
                 continue;
             }
 
             merged.add(new ChunkDraft(currentText.trim(), currentScope));
-
-            String textToStart = draftText;
-            if (sameScope && overlapWords > 0) {
-                String overlap = tailWords(currentText, overlapWords);
-                if (!overlap.isBlank()) {
-                    textToStart = overlap + " " + draftText;
-                    int overlappedWords = countWords(overlap);
-                    int candidateWords = overlappedWords + draftWords;
-                    if (candidateWords <= maxWords) {
-                        currentText = textToStart;
-                        currentScope = draftScope;
-                        currentWords = candidateWords;
-                        continue;
-                    }
-                }
-            }
-
-            currentText = textToStart;
+            currentText = draftText;
             currentScope = draftScope;
-            currentWords = countWords(currentText);
+            currentWords = draftWords;
         }
 
         if (currentText != null && !currentText.isBlank()) {
@@ -227,26 +220,6 @@ public abstract class KnowledgeProcessingUtils {
             return false;
         }
         return new LinkedHashSet<>(left).equals(new LinkedHashSet<>(right));
-    }
-
-    private String tailWords(String text, int wordCount) {
-        if (text == null || text.isBlank() || wordCount <= 0) {
-            return "";
-        }
-
-        String[] words = text.trim().split("\\s+");
-        if (words.length <= wordCount) {
-            return text.trim();
-        }
-
-        StringBuilder tail = new StringBuilder();
-        for (int i = words.length - wordCount; i < words.length; i++) {
-            if (tail.length() > 0) {
-                tail.append(' ');
-            }
-            tail.append(words[i]);
-        }
-        return tail.toString();
     }
 
     // Probeert functielabels te herkennen in een kopregel.
