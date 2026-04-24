@@ -138,6 +138,10 @@ public class AppVenster extends JFrame {
         berichtenTonen.addBubble(text, false, conversational, rememberedMessageLimit);
     }
 
+    public void addAssistantBubbleAnimated(String text, boolean conversational) {
+        berichtenTonen.addAnimatedAssistantBubble(text, conversational, rememberedMessageLimit);
+    }
+
     // Stuurt een bericht naar 'inputPanel' om de verzendknop aan of uit te zetten.
     // Wordt gebruikt om input tijdelijk te blokkeren (bijv. tijdens laden van data).
     public void setSendEnabled(boolean enabled) {

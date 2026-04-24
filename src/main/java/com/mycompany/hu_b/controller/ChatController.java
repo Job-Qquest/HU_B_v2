@@ -72,7 +72,7 @@ public class ChatController {
 
 // Zet het antwoord terug in de UI
                 SwingUtilities.invokeLater(()
-                        -> view.addAssistantBubble(finalAnswer, true));
+                        -> view.addAssistantBubbleAnimated(finalAnswer, true));
 
             } catch (Exception ex) {
                 ex.printStackTrace();
