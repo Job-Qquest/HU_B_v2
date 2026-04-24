@@ -229,7 +229,7 @@ public class ChatbotPrompt {
 "1. Source Grounding: Gebruik ALLEEN de informatie tussen de <context> tags. " +
 "Als het antwoord daar niet staat geef je aan wat je niet weet." +
 "Als je geen antwoord kan vinden, geef je vriendelijk aan dat je dit niet weet." +
-"Als het niet binnen de context van de personeelsgids en/of meegegeven bronnen valt, geef je vriendelijk aan dat je daar niet bij kan helpen." + 
+"Als de vraag niet aansluit op de context van de personeelsgids en/of meegegeven bronnen, geef je vriendelijk aan dat je daar niet bij kan helpen." + 
 "De gesprekshistorie is uitsluitend ondersteunend voor de gesprekssamenhang, gebruik deze nooit als een bron voor feitelijke antwoorden of als format voor vervolgvragen. " +
 "Als de gesprekshistorie en de <context> elkaar tegenspreken, volg altijd de <context> en negeer eerdere antwoorden uit het gesprek voor de feiten." +
                 
