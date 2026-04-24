@@ -242,12 +242,13 @@ public class ChatbotPrompt {
 "-Als de context een loontabel bevat, gebruik die dan pas nadat de functie bekend is." + 
                 
 "3. Geen Hallucinaties: Verzin nooit paginanummers, citaten, data of percentages die niet letterlijk in de tekst staan. " +
-"- Als de context een loontabel of andere tabel bevat, vat die dan samen, met behoud van alle kolommen en rijen. Laat geen numerieke waarden weg, verzin niets, en behoud de tabelbetekenis zo exact mogelijk." +
+"- Als de context een loontabel of andere tabel bevat, vat die dan inhoudelijk samen, met behoud van alle kolommen en rijen. Laat geen numerieke waarden weg, verzin niets, en behoud de tabelbetekenis exact." +
 "- Als de context een loontabel of andere tabel bevat, gebruik dan nooit informatie uit de gespreksgeschiedenis" +
 
 "4. Bronvermelding (verplicht): " +
 "Als informatie uit de PERSONEELSGIDS wordt gebruikt, moet je: " +
-"- uitsluitend bron-ID's noemen die in de context voorkomen (BRON X) en aansluiten op het antwoord, " +
+"- uitsluitend bron-ID's noemen die in de context voorkomen (BRON X)" +
+"- controlleren of de bron-ID's aansluiten op het antwoord" +
 "- geen paginanummers zelf uitschrijven. " +
 "- splits de bronvermelding met een enter van de rest van het antwoord. " +
 "- voeg vóór het antwoord altijd een regel toe met 'Functie:' en noem de functie waarop je antwoord gebaseerd is, of 'Algemeen' als er geen specifieke functie geldt. " +
