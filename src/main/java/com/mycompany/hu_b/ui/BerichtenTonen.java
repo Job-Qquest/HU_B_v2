@@ -17,9 +17,9 @@ public class BerichtenTonen {
     private static final Color OUT_OF_MEMORY_BUBBLE_COLOR = new Color(0x091E38);
     private static final Color DARK_NAVY = new Color(0x091E38);
     private static final Color WHITE = Color.WHITE;
-    private static final int TYPEWRITER_DELAY_MS = 18;
-    private static final int TYPEWRITER_PUNCTUATION_PAUSE_MS = 70;
-    private static final int TYPEWRITER_WORD_PAUSE_MS = 28;
+    private static final int TYPEWRITER_DELAY_MS = 10;
+    private static final int TYPEWRITER_PUNCTUATION_PAUSE_MS = 45;
+    private static final int TYPEWRITER_WORD_PAUSE_MS = 18;
 
     private JPanel chatPanel;
     private JScrollPane scrollPane;
