@@ -27,6 +27,13 @@ public class ChatbotAntwoord {
     private static final Pattern CONTEXT_DEPENDENT_PATTERN = Pattern.compile(
             "\\b(dat|dit|deze|die|daar|daarover|daarvan|ervoor|daarvoor|hierover|hiervan|hiermee|daarmee|zelfde|vorige|eerder|voorgaande|bovenstaande|hierboven|hieronder|hierna)\\b",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern MONTH_PATTERN = Pattern.compile(
+            "\\b(?:in|vanaf|per|begin(?:nen)?\\s+(?:in|op)?|start(?:en)?\\s+(?:in|op)?)\\s+"
+                    + "(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december|"
+                    + "jan|feb|mrt|apr|mei|jun|jul|aug|sep|sept|okt|nov|dec)\\b",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern PRORATA_ANNUAL_PATTERN = Pattern.compile(
+            "(?i)\\b(\\d+(?:[.,]\\d+)?)\\s+(?:vakantieverlofdagen|vakantiedagen|verlofdagen|dagen|uren)\\s+per\\s+jaar\\b");
 
     private final List<org.json.JSONObject> conversationHistory = new ArrayList<>();
 

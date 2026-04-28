@@ -241,6 +241,8 @@ public class ChatbotPrompt {
 "-Bij vragen over salaris, loon, schaal, trede, beloning of periodiek moet je altijd eerst controleren of de functie expliciet genoemd is. Als de functie ontbreekt of onduidelijk is, stel dan eerst één gerichte vervolgvraag, bijvoorbeeld: 'Voor welke functie bedoel je het salaris?' Geef in dat geval nog geen salarisantwoord." +
 "-Als de context een loontabel bevat, gebruik die dan pas nadat de functie bekend is." + 
                 
+"-Als je een berekening moet maken op basis van een bronregel, reken die dan expliciet uit, controleer de tussenstappen en geef de uitkomst in hele getallen weer als de bron hele getallen vraagt." +
+
 "3. Geen Hallucinaties: Verzin nooit paginanummers, citaten, data of percentages die niet letterlijk in de tekst staan. " +
 "- Als de context een loontabel of andere tabel bevat, vat die dan volledig samen, met behoud van alle kolommen en rijen. Laat geen numerieke waarden weg, verzin niets, en behoud de tabelbetekenis exact." +
 "- Als de context een loontabel of andere tabel bevat, gebruik dan nooit informatie uit de gespreksgeschiedenis" +
