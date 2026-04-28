@@ -19,6 +19,7 @@ public class AppVenster extends JFrame {
     private BerichtenTonen berichtenTonen;
     private InputPanel inputPanel;
     private ChatController controller;
+    private JButton refreshButton;
     private int rememberedMessageLimit = DEFAULT_REMEMBERED_MESSAGE_LIMIT;
      private static final String PERSONEELSGIDS_VERSIE =
             "Personeelsgids BU Talentclass versie 2024.1 en gelinkte bronnen"
@@ -39,13 +40,13 @@ public class AppVenster extends JFrame {
 
         // Verbindt input van de gebruiker met de controller (verstuurt vragen)
         inputPanel.setOnSend(text -> controller.send(text));
+        setRefreshEnabled(false);
 
         setVisible(true);
 
         // Toont eerste berichten bij opstarten
         addAssistantBubble("Welkom! Ik ben HU-B, jouw HR-assistent.", false);
         addAssistantBubble("Gebruikte bron: " + PERSONEELSGIDS_VERSIE, false);
-        addAssistantBubble("Ik laad nu de personeelsgids. Een moment geduld...", false);
         
         // Start laden van de kennisbron (PDF)
         controller.startKnowledgeLoading();
@@ -90,9 +91,12 @@ public class AppVenster extends JFrame {
     }
 
     private JPanel buildHeaderPanel() {
-        JPanel headerPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 12));
+        JPanel headerPanel = new JPanel(new BorderLayout());
         headerPanel.setBackground(HEADER_BACKGROUND);
         headerPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(0xD9E2F2)));
+
+        JPanel leftPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 16, 12));
+        leftPanel.setOpaque(false);
 
         JLabel logoLabel = new JLabel();
         ImageIcon logoIcon = loadLogoIcon();
@@ -105,7 +109,22 @@ public class AppVenster extends JFrame {
             logoLabel.setForeground(DARK_NAVY);
         }
 
-        headerPanel.add(logoLabel);
+        leftPanel.add(logoLabel);
+
+        JPanel rightPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 16, 12));
+        rightPanel.setOpaque(false);
+
+        refreshButton = new JButton("Update bronnen");
+        refreshButton.setFocusPainted(false);
+        refreshButton.addActionListener(e -> {
+            if (controller != null) {
+                controller.refreshKnowledge();
+            }
+        });
+        rightPanel.add(refreshButton);
+
+        headerPanel.add(leftPanel, BorderLayout.WEST);
+        headerPanel.add(rightPanel, BorderLayout.EAST);
         return headerPanel;
     }
 
@@ -155,5 +174,11 @@ public class AppVenster extends JFrame {
 
     public void setRememberedMessageLimit(int rememberedMessageLimit) {
         this.rememberedMessageLimit = Math.max(0, rememberedMessageLimit);
+    }
+
+    public void setRefreshEnabled(boolean enabled) {
+        if (refreshButton != null) {
+            refreshButton.setEnabled(enabled);
+        }
     }
 }

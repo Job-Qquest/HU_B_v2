@@ -32,6 +32,7 @@ public class ChatController {
     private final KnowledgeChunkCache chunkCache;
 
     private volatile boolean knowledgeReady = false;
+    private volatile boolean knowledgeLoading = false;
 
 // Initialiseert alle onderdelen van de chatbot
     public ChatController(AppVenster view) {
@@ -96,6 +97,39 @@ public class ChatController {
 // Methode die bij het opstarten wordt aangeroepen om de kennisbron te laden
 // Ook dit gebeurt in een aparte thread (kan lang duren)
     public void startKnowledgeLoading() {
+        loadKnowledgeAsync(false);
+    }
+
+    // Forceert een volledige herlaadbeurt van websites en documenten.
+    // De cache wordt hierbij bewust genegeerd zodat bijgewerkte bronnen direct worden opgehaald.
+    public void refreshKnowledge() {
+        loadKnowledgeAsync(true);
+    }
+
+    private void loadKnowledgeAsync(boolean forceReload) {
+        synchronized (this) {
+            if (knowledgeLoading) {
+                SwingUtilities.invokeLater(() -> view.addAssistantBubble(
+                        forceReload
+                                ? "Ik ben al bezig met het vernieuwen van de bronnen."
+                                : "Ik ben al bezig met het laden van de bronnen.",
+                        false));
+                return;
+            }
+            knowledgeLoading = true;
+        }
+
+        final boolean hadKnowledgeBeforeReload = knowledgeReady;
+        SwingUtilities.invokeLater(() -> {
+            view.setSendEnabled(false);
+            view.setRefreshEnabled(false);
+            view.addAssistantBubble(
+                    forceReload
+                            ? "Ik ververs nu alle websites en documenten. Dit kan even duren..."
+                            : "Ik laad nu de personeelsgids. Een moment geduld...",
+                    false);
+        });
+
         new Thread(() -> {
             try {
                 openAIService.validateApiKey();
@@ -109,78 +143,16 @@ public class ChatController {
                 }
                 String archiveDirectories = archiveDirectory.toString();
                 Path cacheFile = chunkCache.resolveDefaultCachePath(guideFile);
-                
-                //Leest bestand lijstWebsites.txt en maakt een lijst met websitelinks
-                //die wordt gebruikt om te scrapen
-                Path websitesList = Path.of("lijstWebsites.txt").toAbsolutePath().normalize();
-                List<String> websiteLinks = new ArrayList<>();
-                if (Files.exists(websitesList)) {
-                    for (String rawLink : Files.readAllLines(websitesList)) {
-                        if (rawLink == null) {
-                            continue;
-                        }
+                KnowledgeLoadContext loadContext = prepareKnowledgeLoadContext(guideFile, archiveDirectory, cacheFile);
 
-                        String trimmed = rawLink.trim();
-                        if (!trimmed.isEmpty()) {
-                            websiteLinks.add(trimmed);
-                        }
-                    }
-                } else {
-                    System.out.println("lijstWebsites.txt niet gevonden op " + websitesList);
-                }
-
-                //Maakt een lijst met alle word en pdf bestanden in de map waar 
-                //de personeelsgids in staat
-                List<String> supplementarySources = new ArrayList<>();
-                File directory = new File(archiveDirectories);
-                File[] files = directory.listFiles();
-                if (files != null) {
-                    for (File file : files) {
-                        if (file == null || file.isDirectory()) {
-                            continue;
-                        }
-
-                        String name = file.getName();
-                        if (name == null) {
-                            continue;
-                        }
-
-                        String lowerName = name.toLowerCase(Locale.ROOT);
-                        String guideName = guideFile.getFileName() == null
-                                ? ""
-                                : guideFile.getFileName().toString().toLowerCase(Locale.ROOT);
-                        String cacheName = cacheFile.getFileName() == null
-                                ? ""
-                                : cacheFile.getFileName().toString().toLowerCase(Locale.ROOT);
-
-                        if (lowerName.equals(guideName) || lowerName.equals(cacheName)) {
-                            continue;
-                        }
-
-                        if (lowerName.endsWith(".pdf")
-                                || lowerName.endsWith(".doc")
-                                || lowerName.endsWith(".docx")) {
-                            supplementarySources.add(file.toPath().toAbsolutePath().normalize().toString());
-                        }
-                    }
-                }
-
-                List<Path> sourceFiles = new ArrayList<>();
-                sourceFiles.add(guideFile);
-                if (Files.exists(websitesList)) {
-                    sourceFiles.add(websitesList);
-                }
-                for (String source : supplementarySources) {
-                    sourceFiles.add(Path.of(source));
-                }
-
-                if (chunkCache.isCacheValid(cacheFile, sourceFiles)) {
+                if (!forceReload && chunkCache.isCacheValid(cacheFile, loadContext.sourceFiles())) {
                     try {
                         knowledgeService.replaceChunks(chunkCache.loadChunks(cacheFile));
                         knowledgeReady = true;
 
                         SwingUtilities.invokeLater(() -> {
                             view.setSendEnabled(true);
+                            view.setRefreshEnabled(true);
                             view.addAssistantBubble("De kennisbron is geladen uit de cache. Je kunt nu vragen stellen.", false);
                         });
                         return;
@@ -189,29 +161,50 @@ public class ChatController {
                     }
                 }
 
-                List<Path> webArchiveFiles = webPageArchiveService.archivePages(websiteLinks, archiveDirectory);
+                List<Path> webArchiveFiles = webPageArchiveService.archivePages(loadContext.websiteLinks(), archiveDirectory);
+                List<String> rebuiltSupplementarySources = new ArrayList<>(loadContext.supplementarySources());
                 for (Path webArchiveFile : webArchiveFiles) {
                     if (webArchiveFile != null) {
-                        supplementarySources.add(webArchiveFile.toString());
+                        rebuiltSupplementarySources.add(webArchiveFile.toString());
                     }
                 }
 
-                knowledgeService.loadGuide(resolveGuidePath(), supplementarySources);
-                chunkCache.saveChunks(cacheFile, knowledgeService.getChunks(), sourceFiles);
+                PdfProcessing stagedKnowledgeService = new PdfProcessing(openAIService);
+                stagedKnowledgeService.loadGuide(resolveGuidePath(), rebuiltSupplementarySources);
+                chunkCache.saveChunks(cacheFile, stagedKnowledgeService.getChunks(), loadContext.sourceFiles());
+                knowledgeService.replaceChunks(stagedKnowledgeService.getChunks());
                 knowledgeReady = true;
 
                 SwingUtilities.invokeLater(() -> {
                     view.setSendEnabled(true);
-                    view.addAssistantBubble("De kennisbron is opgebouwd en opgeslagen in de cache. Je kunt nu vragen stellen.", false);
+                    view.setRefreshEnabled(true);
+                    view.addAssistantBubble(
+                            forceReload
+                                    ? "De bronnen zijn opnieuw ingeladen en de cache is ververst. Je kunt nu vragen stellen."
+                                    : "De kennisbron is opgebouwd en opgeslagen in de cache. Je kunt nu vragen stellen.",
+                            false);
                 });
 
             } catch (Exception ex) {
                 ex.printStackTrace();
 
                 SwingUtilities.invokeLater(() -> {
-                    view.addAssistantBubble("Opstartfout: " + ex.getMessage(), false);
-                    view.addAssistantBubble("Tip: controleer OPENAI_API_KEY en je internetverbinding.", false);
+                    if (hadKnowledgeBeforeReload) {
+                        knowledgeReady = true;
+                        view.setSendEnabled(true);
+                        view.addAssistantBubble("Vernieuwen mislukt, maar de bestaande kennisbron blijft actief.", false);
+                    } else {
+                        knowledgeReady = false;
+                        view.setSendEnabled(false);
+                        view.addAssistantBubble("Opstartfout: " + ex.getMessage(), false);
+                        view.addAssistantBubble("Tip: controleer OPENAI_API_KEY en je internetverbinding.", false);
+                    }
+                    view.setRefreshEnabled(true);
                 });
+            } finally {
+                synchronized (ChatController.this) {
+                    knowledgeLoading = false;
+                }
             }
         }).start();
     }
@@ -219,5 +212,76 @@ public class ChatController {
     // De hoofdgids blijft altijd de PDF; daaruit halen we de verwijzingen naar extra bronnen.
     private String resolveGuidePath() {
         return "personeelsgids.pdf";
+    }
+
+    private KnowledgeLoadContext prepareKnowledgeLoadContext(Path guideFile, Path archiveDirectory, Path cacheFile) throws Exception {
+        // Leest bestand lijstWebsites.txt en maakt een lijst met websitelinks
+        // die wordt gebruikt om te scrapen.
+        Path websitesList = Path.of("lijstWebsites.txt").toAbsolutePath().normalize();
+        List<String> websiteLinks = new ArrayList<>();
+        if (Files.exists(websitesList)) {
+            for (String rawLink : Files.readAllLines(websitesList)) {
+                if (rawLink == null) {
+                    continue;
+                }
+
+                String trimmed = rawLink.trim();
+                if (!trimmed.isEmpty()) {
+                    websiteLinks.add(trimmed);
+                }
+            }
+        } else {
+            System.out.println("lijstWebsites.txt niet gevonden op " + websitesList);
+        }
+
+        // Maakt een lijst met alle word en pdf bestanden in de map waar
+        // de personeelsgids in staat.
+        List<String> supplementarySources = new ArrayList<>();
+        File directory = archiveDirectory.toFile();
+        File[] files = directory.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file == null || file.isDirectory()) {
+                    continue;
+                }
+
+                String name = file.getName();
+                if (name == null) {
+                    continue;
+                }
+
+                String lowerName = name.toLowerCase(Locale.ROOT);
+                String guideName = guideFile.getFileName() == null
+                        ? ""
+                        : guideFile.getFileName().toString().toLowerCase(Locale.ROOT);
+                String cacheName = cacheFile.getFileName() == null
+                        ? ""
+                        : cacheFile.getFileName().toString().toLowerCase(Locale.ROOT);
+
+                if (lowerName.equals(guideName) || lowerName.equals(cacheName)) {
+                    continue;
+                }
+
+                if (lowerName.endsWith(".pdf")
+                        || lowerName.endsWith(".doc")
+                        || lowerName.endsWith(".docx")) {
+                    supplementarySources.add(file.toPath().toAbsolutePath().normalize().toString());
+                }
+            }
+        }
+
+        List<Path> sourceFiles = new ArrayList<>();
+        sourceFiles.add(guideFile);
+        if (Files.exists(websitesList)) {
+            sourceFiles.add(websitesList);
+        }
+        for (String source : supplementarySources) {
+            sourceFiles.add(Path.of(source));
+        }
+
+        return new KnowledgeLoadContext(websiteLinks, supplementarySources, sourceFiles);
+    }
+
+    private record KnowledgeLoadContext(List<String> websiteLinks, List<String> supplementarySources, List<Path> sourceFiles) {
     }
 }
