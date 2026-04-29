@@ -16,7 +16,7 @@ public class BerichtenTonen {
 
     private static final Color USER_BUBBLE_COLOR = new Color(0x37C1F1);
     private static final Color ASSISTANT_BUBBLE_COLOR = new Color(0xFF3200);
-    private static final Color OUT_OF_MEMORY_BUBBLE_COLOR = new Color(0x091E38);
+    private static final Color OUT_OF_MEMORY_BUBBLE_COLOR = new Color(0x3B3052);
     private static final Color DARK_NAVY = new Color(0x091E38);
     private static final Color WHITE = Color.WHITE;
     private static final int TYPEWRITER_DELAY_MS = 10;

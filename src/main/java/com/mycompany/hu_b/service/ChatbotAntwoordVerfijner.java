@@ -30,6 +30,11 @@ public class ChatbotAntwoordVerfijner {
         return formatSourceReference(chunk);
     }
 
+    // Gebruikt een expliciet paginanummer voor gevallen waarin de bron vast moet staan.
+    public String formatSourceReferenceForPage(ChunkEmbedding chunk, int pageNumber) {
+        return formatSourceReference(chunk, pageNumber);
+    }
+
 // Hoofmethode die: Antwoord opschoont, bronnen analyseert, relevante pagina's bepaalt, nette output maakt met paginareferenties 
     public String normalizeAnswerWithPageReferences(String question,
                                                     String rawAnswer,
@@ -211,6 +216,10 @@ public class ChatbotAntwoordVerfijner {
 // Zet een chunk om naar een bronverwijzing die klopt voor PDF en Word.
 // PDF-chunks krijgen een paginanummer; Word-bronnen krijgen de bestandsnaam.
     String formatSourceReference(ChunkEmbedding chunk) {
+        return formatSourceReference(chunk, null);
+    }
+
+    private String formatSourceReference(ChunkEmbedding chunk, Integer forcedPage) {
         if (chunk == null) {
             return "N.v.t.";
         }
@@ -220,8 +229,9 @@ public class ChatbotAntwoordVerfijner {
         String sourceUrl = chunk.getSourceUrl();
         String sourcePath = chunk.getSourcePath();
         int page = chunk.getPage();
-        String pageText = page > 0 ? "pagina " + page : null;
-        String linkTarget = buildSourceTarget(chunk);
+        int resolvedPage = forcedPage != null && forcedPage > 0 ? forcedPage : page;
+        String pageText = resolvedPage > 0 ? "pagina " + resolvedPage : null;
+        String linkTarget = buildSourceTarget(chunk, forcedPage);
 
         if ((sourceName != null && !sourceName.isBlank()) || (sourceUrl != null && !sourceUrl.isBlank())) {
             String displayLabel = label != null && !label.isBlank()
@@ -245,25 +255,32 @@ public class ChatbotAntwoordVerfijner {
             if (chunk.isSourcePdf() && pageText != null) {
                 return buildHtmlLink(pageText, linkTarget);
             }
-            return buildHtmlLink(page > 0 ? "PAGINA " + page : "bron", linkTarget);
+            return buildHtmlLink(resolvedPage > 0 ? "PAGINA " + resolvedPage : "bron", linkTarget);
         }
 
-        return page > 0 ? "PAGINA " + page : "N.v.t.";
+        return resolvedPage > 0 ? "PAGINA " + resolvedPage : "N.v.t.";
     }
 
     private String buildSourceTarget(ChunkEmbedding chunk) {
+        return buildSourceTarget(chunk, null);
+    }
+
+    private String buildSourceTarget(ChunkEmbedding chunk, Integer forcedPage) {
         if (chunk == null) {
             return null;
         }
 
         String sourceTarget = chunk.getSourceTarget();
         if (sourceTarget != null && !sourceTarget.isBlank()) {
+            if (forcedPage != null && forcedPage > 0) {
+                return forcePageOnTarget(sourceTarget, forcedPage);
+            }
             return sourceTarget;
         }
 
         String sourceUrl = chunk.getSourceUrl();
         String sourcePath = chunk.getSourcePath();
-        int page = chunk.getPage();
+        int page = forcedPage != null && forcedPage > 0 ? forcedPage : chunk.getPage();
 
         if (sourceUrl != null && !sourceUrl.isBlank()) {
             String trimmedUrl = sourceUrl.trim();
@@ -287,6 +304,27 @@ public class ChatbotAntwoordVerfijner {
         return null;
     }
 
+    private String forcePageOnTarget(String target, int page) {
+        if (target == null || target.isBlank() || page <= 0) {
+            return target;
+        }
+
+        String trimmedTarget = target.trim();
+        if (trimmedTarget.contains("#page=")) {
+            return trimmedTarget.replaceAll("#page=\\d+", "#page=" + page);
+        }
+
+        if (trimmedTarget.contains("#")) {
+            return trimmedTarget.substring(0, trimmedTarget.indexOf('#')) + "#page=" + page;
+        }
+
+        if (looksLikePdfLink(trimmedTarget) || trimmedTarget.startsWith("file:")) {
+            return trimmedTarget + "#page=" + page;
+        }
+
+        return trimmedTarget;
+    }
+
     private boolean looksLikePdfLink(String sourceUrl) {
         if (sourceUrl == null || sourceUrl.isBlank()) {
             return false;
@@ -300,8 +338,11 @@ public class ChatbotAntwoordVerfijner {
             return url;
         }
         String trimmedUrl = url.trim();
+        if (trimmedUrl.contains("#page=")) {
+            return trimmedUrl.replaceAll("#page=\\d+", "#page=" + page);
+        }
         if (trimmedUrl.contains("#")) {
-            return trimmedUrl;
+            return trimmedUrl.substring(0, trimmedUrl.indexOf('#')) + "#page=" + page;
         }
         return trimmedUrl + "#page=" + page;
     }

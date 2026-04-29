@@ -51,6 +51,16 @@ public class ChatController {
             return;
         }
 
+        if (isCelebrationTrigger(question)) {
+            view.addUserBubble(question, true);
+            view.clearInput();
+            SwingUtilities.invokeLater(() -> {
+                view.playCelebration();
+                view.addAssistantBubble("Hoera! 🎉", false);
+            });
+            return;
+        }
+
         if (!knowledgeReady) {
             view.addAssistantBubble("De gids is nog niet klaar met laden. Probeer het zo opnieuw.", false);
             return;
@@ -92,6 +102,19 @@ public class ChatController {
                 });
             }
         }).start();
+    }
+
+    private boolean isCelebrationTrigger(String question) {
+        if (question == null) {
+            return false;
+        }
+
+        String normalized = question.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            return false;
+        }
+
+        return normalized.matches(".*\\bhoera\\b.*");
     }
 
 // Methode die bij het opstarten wordt aangeroepen om de kennisbron te laden
