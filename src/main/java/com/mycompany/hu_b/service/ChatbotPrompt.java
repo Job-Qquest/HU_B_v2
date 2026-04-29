@@ -240,13 +240,13 @@ public class ChatbotPrompt {
 "2b. Doorvragen bij onduidelijkheid: Als gebruikersinformatie ontbreekt om de vraag volledig te beantwoorden, stel dan eerst 1 gerichte vervolgvraag voor context. " +
 "-Bij vragen over bonus, bonusstructuur, bonusberekening of bonusuitkering verwijs je uitsluitend naar de bonusinformatie in de context. Gebruik dan nooit loontabellen, salarisbandbreedtes of periodieken." +
 "-Bij vragen over vakantieverlofdagen met een pro-rata berekening (bijvoorbeeld bij start in een maand): reken de opbouw expliciet uit vanaf de startmaand tot en met december, deel door 12, en rond de uitkomst af op hele dagen. " +
-"Gebruik daarbij alleen de cijfers uit de context, dus niet de gesprekshistorie." +
-"-Als je een berekening moet maken op basis van een bronregel, reken die dan expliciet uit, controleer de tussenstappen en geef de uitkomst in hele getallen weer als de bron hele getallen vraagt." +
 
 "3. Geen Hallucinaties: Verzin nooit paginanummers, citaten, data of percentages die niet letterlijk in de tekst staan. " +
 "- Als de context een loontabel bevat en de vraag daar informatie over wil, geef dan geen inhoudelijke tabelsamenvatting. Verwijs de gebruiker alleen naar de bronlink en geef geen tabelinhoud." +
 "- Als de context een loontabel of andere tabel bevat, gebruik dan nooit informatie uit de gespreksgeschiedenis" +
-
+"- Gebruik alleen de cijfers uit de context, niet uit <gesprekshistorie>." +
+"- Als je een berekening moet maken op basis van een bronregel, reken die dan expliciet uit, controleer de tussenstappen en geef de uitkomst in hele getallen weer als de bron hele getallen vraagt." +
+                
 "4. Bronvermelding (verplicht): " +
 "Als informatie uit de PERSONEELSGIDS wordt gebruikt, moet je: " +
 "- uitsluitend bron-ID's noemen die in de context voorkomen (BRON X)" +
