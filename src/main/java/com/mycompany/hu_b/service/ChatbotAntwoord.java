@@ -96,6 +96,14 @@ public class ChatbotAntwoord {
             return answer;
         }
 
+        Optional<String> salaryRedirectAnswer = buildSalaryRedirectAnswer(effectiveQuestion, rankedChunks);
+        if (salaryRedirectAnswer.isPresent()) {
+            String answer = salaryRedirectAnswer.get();
+            clearPendingClarification();
+            appendConversationTurn(historyQuestion, answer);
+            return answer;
+        }
+
         ClarificationRequest clarificationRequest = determineClarificationRequest(effectiveQuestion, rankedChunks);
         if (clarificationRequest != null) {
             pendingClarification = new PendingClarification(effectiveQuestion, clarificationRequest.message());
@@ -384,6 +392,70 @@ public class ChatbotAntwoord {
         return normalized.matches(".*\\b(nee|nee dank je|niet nodig|liever niet|hoeft niet|geen mail|geen e-mail).*");
     }
 
+    private Optional<String> buildSalaryRedirectAnswer(String question, List<ChunkEmbedding> rankedChunks) {
+        if (!isSalaryQuestion(question)) {
+            return Optional.empty();
+        }
+
+        Set<String> questionFunctions = knowledgeService.detectFunctionLabels(question);
+        ChunkEmbedding payrollChunk = findRelevantPayrollChunk(rankedChunks, questionFunctions);
+
+        if (payrollChunk == null) {
+            return Optional.of("Ik kan de loontabelbron niet direct vinden. Controleer de bron of geef de functie iets specifieker op.");
+        }
+
+        String sourceReference = antwoordVerfijner.formatSourceReferenceForDisplay(payrollChunk);
+
+        return Optional.of(
+                "Klik op de bronlink hieronder om de loontabel te openen.\n"
+                + "Bron: " + sourceReference
+        );
+    }
+
+    private ChunkEmbedding findRelevantPayrollChunk(List<ChunkEmbedding> rankedChunks, Set<String> questionFunctions) {
+        if (rankedChunks == null || rankedChunks.isEmpty()) {
+            return null;
+        }
+
+        List<ChunkEmbedding> payrollChunks = new ArrayList<>();
+        for (ChunkEmbedding chunk : rankedChunks) {
+            if (isPayrollTableChunk(chunk)) {
+                payrollChunks.add(chunk);
+            }
+        }
+
+        if (payrollChunks.isEmpty()) {
+            return null;
+        }
+
+        if (questionFunctions != null && !questionFunctions.isEmpty()) {
+            for (ChunkEmbedding chunk : payrollChunks) {
+                Set<String> scope = chunk.getFunctionScope();
+                if (scope == null || scope.isEmpty()) {
+                    continue;
+                }
+
+                for (String functionLabel : questionFunctions) {
+                    if (scope.contains(functionLabel)) {
+                        return chunk;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        return payrollChunks.size() == 1 ? payrollChunks.get(0) : null;
+    }
+
+    private boolean isPayrollTableChunk(ChunkEmbedding chunk) {
+        if (chunk == null || chunk.getText() == null) {
+            return false;
+        }
+
+        return chunk.getText().trim().toUpperCase(Locale.ROOT).startsWith("LOONTABEL");
+    }
+
     private String buildEmailDraft(String userConfirmation, PendingEmailDraft emailDraft) throws Exception {
         Map<Integer, ChunkEmbedding> sourceMap = emailDraft.sourceById() == null
                 ? new LinkedHashMap<>()
@@ -489,18 +561,46 @@ public class ChatbotAntwoord {
     }
 
     public boolean isSalaryQuestion(String query) {
-        String normalized = query.toLowerCase();
+        if (query == null) {
+            return false;
+        }
+
+        String normalized = query.toLowerCase(Locale.ROOT);
+        boolean earningQuestion = normalized.matches(".*\\b(verdien|verdient|verdienen|betaal|betaalt|betalen|krijg|krijgt|krijgen)\\b.*")
+                || normalized.matches(".*\\b(wat|hoeveel)\\s+(verdien|verdient|verdienen|krijg|krijgt|krijgen)\\b.*")
+                || normalized.contains("wat verdient")
+                || normalized.contains("hoeveel verdient")
+                || normalized.contains("salaris van")
+                || normalized.contains("loon van")
+                || normalized.contains("beloning van")
+                || normalized.contains("inkomen van");
+
         return normalized.contains("salaris")
                 || normalized.contains("loon")
                 || normalized.contains("loonstrook")
+                || normalized.contains("uurloon")
+                || normalized.contains("maandsalaris")
+                || normalized.contains("jaarsalaris")
+                || normalized.contains("brutosalaris")
+                || normalized.contains("nettosalaris")
+                || normalized.contains("salarisschaal")
+                || normalized.contains("functieschaal")
+                || normalized.contains("schaal")
+                || normalized.contains("trede")
+                || normalized.contains("periodiek")
+                || normalized.contains("inschaling")
+                || normalized.contains("beloning")
                 || normalized.contains("uitbetaling")
                 || normalized.contains("toeslag")
                 || normalized.contains("vakantietoeslag")
                 || normalized.contains("vakantiegeld")
                 || normalized.contains("eindejaarsuitkering")
                 || normalized.contains("bonus")
+                || normalized.contains("bruto")
+                || normalized.contains("netto")
                 || normalized.contains("declaratie")
-                || normalized.contains("inhouding");
+                || normalized.contains("inhouding")
+                || earningQuestion;
     }
 
     public int getMaxHistoryMessages() {

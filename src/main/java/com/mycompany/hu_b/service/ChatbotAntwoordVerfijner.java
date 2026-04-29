@@ -25,6 +25,11 @@ public class ChatbotAntwoordVerfijner {
         this.openAIService = openAIService;
     }
 
+    // Laat andere onderdelen dezelfde bronopmaak gebruiken zonder de linklogica te dupliceren.
+    public String formatSourceReferenceForDisplay(ChunkEmbedding chunk) {
+        return formatSourceReference(chunk);
+    }
+
 // Hoofmethode die: Antwoord opschoont, bronnen analyseert, relevante pagina's bepaalt, nette output maakt met paginareferenties 
     public String normalizeAnswerWithPageReferences(String question,
                                                     String rawAnswer,
@@ -205,7 +210,7 @@ public class ChatbotAntwoordVerfijner {
 
 // Zet een chunk om naar een bronverwijzing die klopt voor PDF en Word.
 // PDF-chunks krijgen een paginanummer; Word-bronnen krijgen de bestandsnaam.
-    private String formatSourceReference(ChunkEmbedding chunk) {
+    String formatSourceReference(ChunkEmbedding chunk) {
         if (chunk == null) {
             return "N.v.t.";
         }

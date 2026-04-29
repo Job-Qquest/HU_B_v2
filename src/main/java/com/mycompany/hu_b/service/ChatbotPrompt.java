@@ -242,7 +242,7 @@ public class ChatbotPrompt {
 "-Als de context een loontabel bevat, gebruik die dan pas nadat de functie bekend is." + 
                 
 "3. Geen Hallucinaties: Verzin nooit paginanummers, citaten, data of percentages die niet letterlijk in de tekst staan. " +
-"- Als de context een loontabel of andere tabel bevat, vat die dan volledig samen, met behoud van alle kolommen en rijen. Laat geen numerieke waarden weg, verzin niets, en behoud de tabelbetekenis exact." +
+"- Als de context een loontabel bevat en de vraag daar informatie over wil, geef dan geen inhoudelijke tabelsamenvatting. Verwijs de gebruiker alleen naar de bronlink en geef geen tabelinhoud." +
 "- Als de context een loontabel of andere tabel bevat, gebruik dan nooit informatie uit de gespreksgeschiedenis" +
 
 "4. Bronvermelding (verplicht): " +
