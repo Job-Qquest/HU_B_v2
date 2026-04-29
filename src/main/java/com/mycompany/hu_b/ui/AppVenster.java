@@ -157,6 +157,10 @@ public class AppVenster extends JFrame {
         berichtenTonen.addBubble(text, false, conversational, rememberedMessageLimit);
     }
 
+    public void replaceLastAssistantBubble(String text, boolean conversational) {
+        berichtenTonen.replaceLastAssistantBubble(text, conversational, rememberedMessageLimit);
+    }
+
     public void addAssistantBubbleAnimated(String text, boolean conversational) {
         berichtenTonen.addAnimatedAssistantBubble(text, conversational, rememberedMessageLimit);
     }

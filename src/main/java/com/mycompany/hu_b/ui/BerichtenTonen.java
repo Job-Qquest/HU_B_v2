@@ -65,6 +65,42 @@ public class BerichtenTonen {
         addBubble(text, false, conversational, rememberedMessageLimit, true);
     }
 
+    public void replaceLastAssistantBubble(String text, boolean conversational, int rememberedMessageLimit) {
+        if (bubbles.isEmpty()) {
+            addBubble(text, false, conversational, rememberedMessageLimit, false);
+            return;
+        }
+
+        MessageBubble lastBubble = bubbles.get(bubbles.size() - 1);
+        if (lastBubble.user()) {
+            addBubble(text, false, conversational, rememberedMessageLimit, false);
+            return;
+        }
+
+        String antwoord = text == null ? "" : text;
+        String disclaimer = "";
+
+        if (antwoord.contains("Disclaimer:")) {
+            int index = antwoord.indexOf("Disclaimer:");
+            disclaimer = antwoord.substring(index).trim();
+            antwoord = antwoord.substring(0, index).trim();
+        }
+
+        JTextPane bubble = lastBubble.component();
+        bubble.setText(buildHtmlText(false, antwoord, disclaimer, true));
+        lastBubble = new MessageBubble(bubble, false, conversational);
+        bubbles.set(bubbles.size() - 1, lastBubble);
+
+        updateRememberedHighlights(rememberedMessageLimit);
+        chatPanel.revalidate();
+        chatPanel.repaint();
+
+        SwingUtilities.invokeLater(() -> {
+            JScrollBar bar = scrollPane.getVerticalScrollBar();
+            bar.setValue(bar.getMaximum());
+        });
+    }
+
     private void addBubble(String text, boolean user, boolean conversational, int rememberedMessageLimit, boolean animated) {
         JPanel row = new JPanel(new BorderLayout());
         row.setOpaque(false);

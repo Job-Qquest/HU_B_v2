@@ -153,7 +153,7 @@ public class ChatController {
                         SwingUtilities.invokeLater(() -> {
                             view.setSendEnabled(true);
                             view.setRefreshEnabled(true);
-                            view.addAssistantBubble("De kennisbron is geladen uit de cache. Je kunt nu vragen stellen.", false);
+                            view.replaceLastAssistantBubble("De kennisbron is geladen uit de cache. Je kunt nu vragen stellen.", false);
                         });
                         return;
                     } catch (Exception cacheEx) {
@@ -178,7 +178,7 @@ public class ChatController {
                 SwingUtilities.invokeLater(() -> {
                     view.setSendEnabled(true);
                     view.setRefreshEnabled(true);
-                    view.addAssistantBubble(
+                    view.replaceLastAssistantBubble(
                             forceReload
                                     ? "De bronnen zijn opnieuw ingeladen en de cache is ververst. Je kunt nu vragen stellen."
                                     : "De kennisbron is opgebouwd en opgeslagen in de cache. Je kunt nu vragen stellen.",
@@ -192,12 +192,13 @@ public class ChatController {
                     if (hadKnowledgeBeforeReload) {
                         knowledgeReady = true;
                         view.setSendEnabled(true);
-                        view.addAssistantBubble("Vernieuwen mislukt, maar de bestaande kennisbron blijft actief.", false);
+                        view.replaceLastAssistantBubble("Vernieuwen mislukt, maar de bestaande kennisbron blijft actief.", false);
                     } else {
                         knowledgeReady = false;
                         view.setSendEnabled(false);
-                        view.addAssistantBubble("Opstartfout: " + ex.getMessage(), false);
-                        view.addAssistantBubble("Tip: controleer OPENAI_API_KEY en je internetverbinding.", false);
+                        view.replaceLastAssistantBubble(
+                                "Opstartfout: " + ex.getMessage() + "\n\nTip: controleer OPENAI_API_KEY en je internetverbinding.",
+                                false);
                     }
                     view.setRefreshEnabled(true);
                 });
