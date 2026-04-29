@@ -34,6 +34,9 @@ public class ChatbotAntwoord {
     private static final Pattern VACATION_TOPIC_PATTERN = Pattern.compile(
             "\\b(vakantie|vakantiedag|vakantieverlof|verlofdagen|vrije dag)\\b",
             Pattern.CASE_INSENSITIVE);
+    private static final Pattern PENSION_TOPIC_PATTERN = Pattern.compile(
+            "\\b(pensioen|pensioenpremie|pensioenreglement|pensioenkapitaal|ouderdomspensioen|partnerpensioen)\\b",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern MONTH_PATTERN = Pattern.compile(
             "\\b(?:in|vanaf|per|begin(?:nen)?\\s+(?:in|op)?|start(?:en)?\\s+(?:in|op)?)\\s+"
                     + "(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december|"
@@ -51,7 +54,6 @@ public class ChatbotAntwoord {
 
     private PendingClarification pendingClarification;
     private PendingEmailDraft pendingEmailDraft;
-    private Topic lastExplicitTopic = Topic.UNKNOWN;
 
     public ChatbotAntwoord(PdfProcessing knowledgeService, OpenAI openAIService) {
         this.knowledgeService = knowledgeService;
@@ -64,8 +66,6 @@ public class ChatbotAntwoord {
         if (question == null || question.isBlank()) {
             return "Ik help je graag. Kun je je vraag iets concreter formuleren?";
         }
-
-        registerExplicitTopic(question);
 
         PendingResolution pendingResolution = resolvePendingClarification(question);
         if (pendingResolution.immediateResponse() != null) {
@@ -159,18 +159,12 @@ public class ChatbotAntwoord {
         }
 
         String enrichedQuestion = question;
-        Topic followUpTopic = resolveFollowUpTopic(question);
         if (isContextDependentQuestion(question)) {
-            List<String> recentQuestions = getRecentUserQuestionsForTopic(MAX_PREVIOUS_USER_QUESTIONS, followUpTopic);
-            if (recentQuestions.isEmpty()) {
-                recentQuestions = getRecentUserQuestions(MAX_PREVIOUS_USER_QUESTIONS);
-            }
-            if (!recentQuestions.isEmpty()) {
+            String previousQuestion = getMostRecentUserQuestion();
+            if (previousQuestion != null && !previousQuestion.isBlank()) {
                 StringBuilder contextualQuestion = new StringBuilder();
                 contextualQuestion.append("Eerdere relevante vragen:\n");
-                for (String previousQuestion : recentQuestions) {
-                    contextualQuestion.append("- ").append(previousQuestion).append("\n");
-                }
+                contextualQuestion.append("- ").append(previousQuestion).append("\n");
                 contextualQuestion.append("Huidige vervolgvraag:\n").append(question.trim());
                 enrichedQuestion = contextualQuestion.toString();
             }
@@ -199,6 +193,7 @@ public class ChatbotAntwoord {
         switch (resolveFollowUpTopic(question)) {
             case BONUS -> enrichedQuery += " bonus bonusberekening quadrimester";
             case VACATION -> enrichedQuery += " vakantieverlof vakantieverlofdagen naar rato";
+            case PENSION -> enrichedQuery += " pensioen pensioenpremie pensioenreglement";
             default -> {
             }
         }
@@ -362,29 +357,20 @@ public class ChatbotAntwoord {
         return questions;
     }
 
-    private List<String> getRecentUserQuestionsForTopic(int maxQuestions, Topic topic) {
-        List<String> questions = new ArrayList<>();
-        if (maxQuestions <= 0 || topic == null || topic == Topic.UNKNOWN) {
-            return questions;
-        }
-
-        for (int i = conversationHistory.size() - 1; i >= 0 && questions.size() < maxQuestions; i--) {
+    private String getMostRecentUserQuestion() {
+        for (int i = conversationHistory.size() - 1; i >= 0; i--) {
             org.json.JSONObject message = conversationHistory.get(i);
             if (message == null || !"user".equalsIgnoreCase(message.optString("role"))) {
                 continue;
             }
 
             String content = message.optString("content", "").trim();
-            if (content.isEmpty()) {
-                continue;
-            }
-
-            if (extractExplicitTopic(content) == topic) {
-                questions.add(0, content);
+            if (!content.isEmpty()) {
+                return content;
             }
         }
 
-        return questions;
+        return null;
     }
 
     private void appendConversationTurn(String userQuestion, String assistantAnswer) {
@@ -678,24 +664,13 @@ public class ChatbotAntwoord {
             return explicitTopic;
         }
 
-        if (lastExplicitTopic != Topic.UNKNOWN) {
-            return lastExplicitTopic;
-        }
-
-        return inferTopicFromRecentUserQuestions();
-    }
-
-    private Topic inferTopicFromRecentUserQuestions() {
-        for (int i = conversationHistory.size() - 1; i >= 0 && i >= conversationHistory.size() - 8; i--) {
+        for (int i = conversationHistory.size() - 1; i >= 0; i--) {
             org.json.JSONObject message = conversationHistory.get(i);
             if (message == null || !"user".equalsIgnoreCase(message.optString("role"))) {
                 continue;
             }
 
-            Topic topic = extractExplicitTopic(message.optString("content", ""));
-            if (topic != Topic.UNKNOWN) {
-                return topic;
-            }
+            return extractExplicitTopic(message.optString("content", ""));
         }
 
         return Topic.UNKNOWN;
@@ -713,15 +688,11 @@ public class ChatbotAntwoord {
         if (VACATION_TOPIC_PATTERN.matcher(normalized).find()) {
             return Topic.VACATION;
         }
+        if (PENSION_TOPIC_PATTERN.matcher(normalized).find()) {
+            return Topic.PENSION;
+        }
 
         return Topic.UNKNOWN;
-    }
-
-    private void registerExplicitTopic(String question) {
-        Topic explicitTopic = extractExplicitTopic(question);
-        if (explicitTopic != Topic.UNKNOWN) {
-            lastExplicitTopic = explicitTopic;
-        }
     }
 
     private String buildEmailDraft(String userConfirmation, PendingEmailDraft emailDraft) throws Exception {
@@ -866,6 +837,7 @@ public class ChatbotAntwoord {
     private enum Topic {
         BONUS,
         VACATION,
+        PENSION,
         UNKNOWN
     }
 
